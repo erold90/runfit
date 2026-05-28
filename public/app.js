@@ -1013,6 +1013,7 @@ function renderAssessmentStep() {
       pushupsMin: st.pushupsMin,
       squats2min: st.squats2min,
       plankSec: st.plankSec,
+      isMale: profile.isMale,
     });
     const calib = calibrate({
       vo2max: vo2, vo2Cat, hrrDrop, hrrCat,

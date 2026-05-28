@@ -99,24 +99,24 @@ export function hrrCategory(hrrDrop) {
 }
 
 // ---------------------------------------------------------------------------
-// C) STRENGTH ASSESSMENT
-//    Norme ACSM Push-up Test + Plank Test + Squat 2-min
-//    Per uomini 30-39 anni (Daniele):
+// C) STRENGTH ASSESSMENT — norme ACSM gender-specific
 //
-//    Push-up (full, 1 min):
-//      <17 poor, 17-21 below, 22-29 average, 30-39 good, >40 excellent
-//    Squat (2 min):
-//      <30 poor, 30-39 below, 40-49 average, 50-59 good, >60 excellent
-//    Plank standard (s):
-//      <30 poor, 30-60 below, 60-90 fair, 90-120 good, >120 excellent
+// Push-up (1 min, full sui piedi; donne possono usare knee push-up):
+//   Uomini 30-39: <17 poor, 17-21 below, 22-29 average, 30-39 good, >40 excellent
+//   Donne 30-39: <8 poor, 8-12 below, 13-19 average, 20-26 good, >27 excellent
+// Squat (2 min):
+//   Uomini 30-39: <25 poor, 25-34 below, 35-44 average, 45-54 good, >55 excellent
+//   Donne 30-39:  <20 poor, 20-29 below, 30-39 average, 40-49 good, >50 excellent
+// Plank (sec, max):
+//   Uomini: <30 poor, 30-60 below, 60-90 fair, 90-120 good, >120 excellent
+//   Donne:  <20 poor, 20-45 below, 45-75 fair, 75-100 good, >100 excellent
 // ---------------------------------------------------------------------------
-export function strengthAssessment({ pushupsMin, squats2min, plankSec }) {
+export function strengthAssessment({ pushupsMin, squats2min, plankSec, isMale = true }) {
   const score = {
-    push: scorePushup(pushupsMin),
-    squat: scoreSquat(squats2min),
-    plank: scorePlank(plankSec),
+    push: scorePushup(pushupsMin, isMale),
+    squat: scoreSquat(squats2min, isMale),
+    plank: scorePlank(plankSec, isMale),
   };
-  // Score medio 0-4
   const avg = (score.push + score.squat + score.plank) / 3;
   let level, label;
   if (avg < 1.0) { level = 'beginner'; label = 'Beginner — riparti dalle basi'; }
@@ -125,28 +125,31 @@ export function strengthAssessment({ pushupsMin, squats2min, plankSec }) {
   return { score, avg: +avg.toFixed(2), level, label };
 }
 
-function scorePushup(reps) {
+function scorePushup(reps, isMale = true) {
   if (reps == null) return 1;
-  if (reps < 10) return 0;
-  if (reps < 18) return 1;
-  if (reps < 25) return 2;
-  if (reps < 35) return 3;
+  const t = isMale ? [10, 18, 25, 35] : [5, 9, 14, 21];
+  if (reps < t[0]) return 0;
+  if (reps < t[1]) return 1;
+  if (reps < t[2]) return 2;
+  if (reps < t[3]) return 3;
   return 4;
 }
-function scoreSquat(reps) {
+function scoreSquat(reps, isMale = true) {
   if (reps == null) return 1;
-  if (reps < 25) return 0;
-  if (reps < 35) return 1;
-  if (reps < 45) return 2;
-  if (reps < 55) return 3;
+  const t = isMale ? [25, 35, 45, 55] : [20, 30, 40, 50];
+  if (reps < t[0]) return 0;
+  if (reps < t[1]) return 1;
+  if (reps < t[2]) return 2;
+  if (reps < t[3]) return 3;
   return 4;
 }
-function scorePlank(secs) {
+function scorePlank(secs, isMale = true) {
   if (secs == null) return 1;
-  if (secs < 30) return 0;
-  if (secs < 60) return 1;
-  if (secs < 90) return 2;
-  if (secs < 120) return 3;
+  const t = isMale ? [30, 60, 90, 120] : [20, 45, 75, 100];
+  if (secs < t[0]) return 0;
+  if (secs < t[1]) return 1;
+  if (secs < t[2]) return 2;
+  if (secs < t[3]) return 3;
   return 4;
 }
 
