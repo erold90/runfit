@@ -1031,7 +1031,7 @@ function renderAssessmentStep() {
         el('div', { class: 'result-label' }, 'VO₂max stimato (Rockport)'),
         el('div', { class: 'result-value' }, `${vo2 ?? '—'} ml/kg/min`),
         el('div', { class: 'result-cat', style: `color: ${vo2Cat?.color}` }, vo2Cat?.label || ''),
-        el('div', { class: 'result-help' }, `Sei nel ${vo2Cat?.percentile}° percentile per uomini ${ageBracket(age)} anni.`),
+        el('div', { class: 'result-help' }, `Sei nel ${vo2Cat?.percentile}° percentile per ${profile.isMale ? 'uomini' : 'donne'} ${ageBracket(age)} anni.`),
       ),
 
       // HRR
