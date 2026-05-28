@@ -278,6 +278,7 @@ function phaseTypeLabel(type) {
 
 function startSession(session) {
   setView('workout');
+  document.body.classList.add('session-active');
   // Sblocca audio (richiesto da iOS dopo gesto utente)
   speak('Pronti?');
   currentRunner = new SessionRunner(session);
@@ -313,10 +314,10 @@ function renderActiveSession(session) {
   const zoneInfo = el('div', { class: 'zone-info' });
   updateZoneInfo(zoneInfo, session.phases[0].type);
 
-  // Controlli
-  const btnPause = el('button', { class: 'btn btn-large btn-control' }, '⏸ Pausa');
-  const btnSkip = el('button', { class: 'btn btn-ghost btn-control', onclick: () => currentRunner.skipPhase() }, 'Salta fase');
-  const btnStop = el('button', { class: 'btn btn-ghost btn-control btn-danger', onclick: confirmStop }, 'Termina');
+  // Controlli — pulsante Pausa centrale grande, laterali più piccoli
+  const btnPause = el('button', { class: 'btn btn-primary btn-control' }, '⏸ Pausa');
+  const btnSkip = el('button', { class: 'btn btn-ghost btn-control', onclick: () => currentRunner.skipPhase() }, '⏭');
+  const btnStop = el('button', { class: 'btn btn-ghost btn-control btn-danger', onclick: confirmStop }, '✕');
 
   btnPause.addEventListener('click', () => {
     currentRunner.toggle();
@@ -339,6 +340,11 @@ function renderActiveSession(session) {
     totalProgress,
     totalInfo,
     el('div', { class: 'controls' }, btnSkip, btnPause, btnStop),
+    el('div', { class: 'controls-legend' },
+      el('span', {}, 'Salta'),
+      el('span', {}, 'Pausa/Riprendi'),
+      el('span', {}, 'Termina'),
+    ),
   ));
 
   // Listener
@@ -369,6 +375,7 @@ function renderActiveSession(session) {
   });
 
   currentRunner.addEventListener('finish', () => {
+    document.body.classList.remove('session-active');
     showFeedbackForm(session);
   });
 }
@@ -386,6 +393,7 @@ function updateZoneInfo(zoneInfoEl, phaseType) {
 function confirmStop() {
   if (confirm('Vuoi davvero terminare la sessione?')) {
     currentRunner.stop();
+    document.body.classList.remove('session-active');
     showFeedbackForm(currentRunner.session, true);
   }
 }
