@@ -35,6 +35,17 @@ const defaultProfile = {
   strengthEnabled: true,
 };
 
+const defaultAssessment = {
+  done: false,
+  walkTest: null,        // { timeMin, finalHr, hrAfter1min, distanceKm, date }
+  strengthTest: null,    // { pushups, squats2min, plankSec, hollowSec, date }
+  results: null,         // { vo2max, vo2Cat, hrrDrop, hrrCat, strengthLevel, hrMax, z2Range }
+};
+
+const LS_ASSESSMENT = 'runfit.assessment';
+export const getAssessment = () => read(LS_ASSESSMENT, defaultAssessment);
+export const saveAssessment = a => write(LS_ASSESSMENT, a);
+
 const defaultProgress = {
   currentWeek: 1,
   currentSessionIndex: 0,  // 0=A, 1=B, 2=C, 3=D, 4=E

@@ -179,6 +179,123 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 .session-next { background: linear-gradient(135deg, var(--bg-elev), var(--bg-elev-2)); }
 
 /* ============================================================================
+   ASSESSMENT WIZARD — Test iniziale
+============================================================================ */
+.assessment-banner {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(168, 85, 247, 0.15));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  display: grid;
+  grid-template-columns: 48px 1fr 24px;
+  gap: 14px;
+  align-items: center;
+  cursor: pointer;
+  transition: transform var(--transition);
+}
+.assessment-banner:active { transform: scale(0.98); }
+.assessment-banner-icon { font-size: 2rem; }
+.assessment-banner-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+.assessment-banner-desc { color: var(--text-muted); font-size: 0.8rem; line-height: 1.4; }
+.assessment-banner-arrow { font-size: 1.5rem; color: var(--info); font-weight: 700; }
+
+.assessment-modal .modal-content { max-height: 92vh; }
+.assessment-content { padding: 24px 20px; }
+.assessment-step-num {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--info);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.assessment-tests-overview {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 16px 0;
+}
+.test-overview-card {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  background: var(--bg-elev-2);
+  padding: 14px;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--info);
+}
+.toc-icon { font-size: 2rem; }
+.toc-title { font-weight: 600; }
+.toc-dur { color: var(--info); font-size: 0.8rem; margin: 2px 0; }
+.toc-desc { color: var(--text-muted); font-size: 0.8rem; line-height: 1.4; }
+
+.assessment-instructions {
+  margin: 14px 0;
+}
+.instr-step {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.instr-step:last-child { border-bottom: none; }
+.instr-num {
+  width: 28px; height: 28px;
+  background: var(--info);
+  color: white;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.instr-step > div { font-size: 0.9rem; line-height: 1.5; color: var(--text); padding-top: 3px; }
+
+.strength-test-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.strength-test-row {
+  display: grid;
+  grid-template-columns: 36px 1fr 100px;
+  gap: 10px;
+  align-items: center;
+  background: var(--bg-elev-2);
+  padding: 12px;
+  border-radius: var(--radius);
+}
+.strength-test-icon { font-size: 1.6rem; }
+.strength-test-name { font-weight: 600; font-size: 0.9rem; }
+.strength-test-desc { color: var(--text-muted); font-size: 0.75rem; line-height: 1.3; margin-top: 2px; }
+.strength-test-input input { text-align: center; font-weight: 700; }
+
+/* Risultati */
+.assessment-results { display: flex; flex-direction: column; gap: 12px; }
+.result-card {
+  background: var(--bg-elev-2);
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border-left: 4px solid var(--accent);
+}
+.result-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.result-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 4px 0;
+}
+.result-cat { font-weight: 600; font-size: 0.95rem; margin-bottom: 4px; }
+.result-help { color: var(--text-muted); font-size: 0.8rem; line-height: 1.4; }
+.calibration-summary {
+  background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(59,130,246,0.1));
+  border-left-color: var(--accent);
+}
+.calib-item {
+  padding: 4px 0;
+  font-size: 0.9rem;
+}
+
+/* ============================================================================
    MODULO FORZA — tema viola/arancio per distinguere dalla corsa
 ============================================================================ */
 :root {

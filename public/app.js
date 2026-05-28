@@ -12,9 +12,15 @@ import {
   getSessions, saveSession, deleteSession,
   getWeights, addWeight,
   getSettings, saveSettings,
+  getAssessment, saveAssessment,
   exportAllJson, importAllJson,
   cloudPush, cloudPull,
 } from './storage.js';
+import {
+  calcVO2maxRockport, vo2maxCategory,
+  hrrCategory, strengthAssessment,
+  calibrate, suggestedZ2Pace,
+} from './assessment.js';
 import { SessionRunner, StrengthRunner, speak, loadVoices } from './coach.js';
 import {
   getStrengthWeekSessions, strengthWeekTip, nextStrengthWeek,
@@ -138,6 +144,19 @@ function renderHome() {
       el('span', { class: 'milestone-value' }, week.milestone),
     ),
   ));
+
+  // Banner Test Iniziale (se non ancora fatto)
+  const assessment = getAssessment();
+  if (!assessment.done) {
+    container.appendChild(el('div', { class: 'card assessment-banner', onclick: () => startAssessmentWizard() },
+      el('div', { class: 'assessment-banner-icon' }, '🏁'),
+      el('div', { class: 'assessment-banner-content' },
+        el('div', { class: 'assessment-banner-title' }, 'Test iniziale — calibra l\'app sui tuoi dati reali'),
+        el('div', { class: 'assessment-banner-desc' }, 'Walk test + strength test in 30 minuti. L\'app userà i risultati per personalizzare zone HR, settimana di partenza e volume.'),
+      ),
+      el('div', { class: 'assessment-banner-arrow' }, '→'),
+    ));
+  }
 
   // Card prossima sessione
   const sessionLetter = ['A', 'B', 'C', 'D', 'E'][progress.currentSessionIndex] || '?';
@@ -826,6 +845,336 @@ function showResultsScreen(record, volumeChangeMessage = null) {
       el('button', { class: 'btn btn-ghost', onclick: () => setView('stats') }, 'Vedi statistiche'),
     ),
   ));
+}
+
+// ============================================================================
+// ASSESSMENT WIZARD — test iniziale
+// ============================================================================
+let assessmentState = null;
+
+function startAssessmentWizard() {
+  assessmentState = {
+    step: 0,
+    walkTest: {},
+    strengthTest: {},
+  };
+  renderAssessmentStep();
+}
+
+function renderAssessmentStep() {
+  const modal = $('#modal');
+  modal.innerHTML = '';
+  modal.classList.add('open', 'assessment-modal');
+  const close = () => { modal.classList.remove('open', 'assessment-modal'); assessmentState = null; };
+
+  const step = assessmentState.step;
+  let content;
+
+  if (step === 0) {
+    // Introduzione
+    content = el('div', {},
+      el('div', { class: 'assessment-step-num' }, 'Passo 1 di 4'),
+      el('h2', {}, '🏁 Test iniziale'),
+      el('div', { class: 'help-text' },
+        'In 2 giorni separati farai due test scientificamente validati. ' +
+        'L\'app calcolerà VO₂max stimato, soglie cardiache reali e livello forza, ' +
+        'poi calibrerà programma e settimana di partenza.',
+      ),
+      el('div', { class: 'assessment-tests-overview' },
+        testOverviewCard('📏', 'Rockport Walk Test', '~20 min', 'Cammina 1 miglio (1.609 km) il più veloce possibile camminando. Niente corsa. Apple Watch traccia HR e tempo.'),
+        testOverviewCard('💪', 'Strength Assessment', '~15 min', '4 esercizi a tempo: squat (2 min), push-up (1 min), plank (max), hollow hold (max). Forma corretta.'),
+      ),
+      el('div', { class: 'help-text', style: 'margin-top: 16px;' },
+        '⚠️ Fai i due test in giorni diversi. Riposa almeno 24h prima del walk test. Niente caffè 3h prima.',
+      ),
+      el('div', { class: 'btn-row' },
+        el('button', { class: 'btn btn-ghost', onclick: close }, 'Annulla'),
+        el('button', { class: 'btn btn-primary', onclick: () => { assessmentState.step = 1; renderAssessmentStep(); } }, 'Cominciamo →'),
+      ),
+    );
+  }
+  else if (step === 1) {
+    // Istruzioni walk test
+    content = el('div', {},
+      el('div', { class: 'assessment-step-num' }, 'Passo 2 di 4 — Walk Test'),
+      el('h2', {}, '📏 Rockport 1-Mile Walk Test'),
+      el('div', { class: 'assessment-instructions' },
+        el('div', { class: 'instr-step' },
+          el('span', { class: 'instr-num' }, '1'),
+          el('div', {}, 'Trova un percorso pianeggiante (pista, lungomare, strada lunga). Misura 1 miglio = 1609 metri. Oppure usa Apple Watch per il GPS.'),
+        ),
+        el('div', { class: 'instr-step' },
+          el('span', { class: 'instr-num' }, '2'),
+          el('div', {}, 'Avvia sul Watch "Camminata all\'aperto". Riscaldati 5 min con cammino normale.'),
+        ),
+        el('div', { class: 'instr-step' },
+          el('span', { class: 'instr-num' }, '3'),
+          el('div', {}, 'Inizia il miglio cronometrato: cammina il più veloce possibile MA SENZA CORRERE (un piede sempre a terra).'),
+        ),
+        el('div', { class: 'instr-step' },
+          el('span', { class: 'instr-num' }, '4'),
+          el('div', {}, 'Al traguardo: ferma SUBITO l\'allenamento sul Watch. Segna l\'HR finale.'),
+        ),
+        el('div', { class: 'instr-step' },
+          el('span', { class: 'instr-num' }, '5'),
+          el('div', {}, 'Resta fermo in piedi 60 secondi, poi rilegga HR (è l\'HRR — heart rate recovery).'),
+        ),
+      ),
+      el('div', { class: 'help-text' },
+        'Quando hai finito il test, torna qui e inserisci i 3 numeri.',
+      ),
+      el('div', { class: 'btn-row' },
+        el('button', { class: 'btn btn-ghost', onclick: close }, 'Esci, lo farò dopo'),
+        el('button', { class: 'btn btn-primary', onclick: () => { assessmentState.step = 2; renderAssessmentStep(); } }, 'Ho fatto il test →'),
+      ),
+    );
+  }
+  else if (step === 2) {
+    // Input walk test
+    const state = assessmentState.walkTest;
+    const timeMinInput = inputField('Tempo (min:sec)', state.timeStr || '', v => state.timeStr = v, 'text', '15:30');
+    const hrFinalInput = inputField('FC finale (bpm)', state.finalHr || '', v => state.finalHr = parseInt(v) || null, 'number', '155');
+    const hrAfterInput = inputField('FC dopo 60s di riposo (bpm)', state.hrAfter1min || '', v => state.hrAfter1min = parseInt(v) || null, 'number', '125');
+    content = el('div', {},
+      el('div', { class: 'assessment-step-num' }, 'Passo 2 di 4 — Risultati Walk Test'),
+      el('h2', {}, '📏 Inserisci i risultati'),
+      timeMinInput, hrFinalInput, hrAfterInput,
+      el('div', { class: 'help-text' },
+        'I 3 numeri li trovi sul Watch a fine sessione (durata, FC finale) e dopo 1 minuto (FC recovery).',
+      ),
+      el('div', { class: 'btn-row' },
+        el('button', { class: 'btn btn-ghost', onclick: () => { assessmentState.step = 1; renderAssessmentStep(); } }, '← Indietro'),
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: () => {
+            const parsed = parseTimeMinSec(state.timeStr);
+            if (!parsed || !state.finalHr || !state.hrAfter1min) {
+              toast('Inserisci tutti e 3 i valori');
+              return;
+            }
+            state.timeMin = parsed;
+            assessmentState.step = 3;
+            renderAssessmentStep();
+          },
+        }, 'Avanti →'),
+      ),
+    );
+  }
+  else if (step === 3) {
+    // Istruzioni + input strength test (singola schermata, l'utente esegue fuori)
+    const state = assessmentState.strengthTest;
+    content = el('div', {},
+      el('div', { class: 'assessment-step-num' }, 'Passo 3 di 4 — Strength Test'),
+      el('h2', {}, '💪 4 esercizi a tempo'),
+      el('div', { class: 'help-text' },
+        'Cronometrati con il telefono o il Watch. Tra un esercizio e l\'altro riposa 2 minuti. Forma sempre corretta — niente rep "sporche".',
+      ),
+      el('div', { class: 'strength-test-list' },
+        strengthTestRow('🦵', 'Squat (2 min)', 'Quanti squat puoi fare in 2 minuti, profondità cosce parallele.',
+          inputField('', state.squats2min || '', v => state.squats2min = parseInt(v) || null, 'number', '40')),
+        strengthTestRow('💪', 'Push-up (1 min)', 'Standard sui piedi se possibile, ginocchia altrimenti.',
+          inputField('', state.pushupsMin || '', v => state.pushupsMin = parseInt(v) || null, 'number', '18')),
+        strengthTestRow('🧘', 'Plank (max)', 'Tempo massimo in posizione di plank avambracci, corpo dritto.',
+          inputField('Secondi', state.plankSec || '', v => state.plankSec = parseInt(v) || null, 'number', '60')),
+        strengthTestRow('🥥', 'Hollow hold (max)', 'Schiena premuta a terra, gambe e braccia tese sollevate. Tempo massimo.',
+          inputField('Secondi', state.hollowSec || '', v => state.hollowSec = parseInt(v) || null, 'number', '30')),
+      ),
+      el('div', { class: 'btn-row' },
+        el('button', { class: 'btn btn-ghost', onclick: () => { assessmentState.step = 2; renderAssessmentStep(); } }, '← Indietro'),
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: () => {
+            if (state.squats2min == null || state.pushupsMin == null || state.plankSec == null) {
+              toast('Inserisci almeno squat, push-up, plank');
+              return;
+            }
+            assessmentState.step = 4;
+            renderAssessmentStep();
+          },
+        }, 'Calcola risultati →'),
+      ),
+    );
+  }
+  else if (step === 4) {
+    // Risultati + calibrazione
+    const profile = getProfile();
+    const age = new Date().getFullYear() - profile.birthYear;
+    const wt = assessmentState.walkTest;
+    const st = assessmentState.strengthTest;
+
+    const vo2 = calcVO2maxRockport({
+      weightKg: profile.weightCurrentKg, age,
+      isMale: profile.isMale, timeMin: wt.timeMin, finalHr: wt.finalHr,
+    });
+    const vo2Cat = vo2maxCategory(vo2, age, profile.isMale);
+    const hrrDrop = wt.finalHr - wt.hrAfter1min;
+    const hrrCat = hrrCategory(hrrDrop);
+    const strAssess = strengthAssessment({
+      pushupsMin: st.pushupsMin,
+      squats2min: st.squats2min,
+      plankSec: st.plankSec,
+    });
+    const calib = calibrate({
+      vo2max: vo2, vo2Cat, hrrDrop, hrrCat,
+      strengthLevel: strAssess.level, age,
+      isMale: profile.isMale, restingHr: profile.restingHr,
+    });
+    const pace = suggestedZ2Pace(vo2);
+
+    content = el('div', { class: 'assessment-results' },
+      el('div', { class: 'assessment-step-num' }, 'Passo 4 di 4 — Risultati'),
+      el('h2', {}, '🎯 Il tuo profilo fitness'),
+
+      // VO2max
+      el('div', { class: 'result-card', style: `border-left-color: ${vo2Cat?.color || '#10b981'}` },
+        el('div', { class: 'result-label' }, 'VO₂max stimato (Rockport)'),
+        el('div', { class: 'result-value' }, `${vo2 ?? '—'} ml/kg/min`),
+        el('div', { class: 'result-cat', style: `color: ${vo2Cat?.color}` }, vo2Cat?.label || ''),
+        el('div', { class: 'result-help' }, `Sei nel ${vo2Cat?.percentile}° percentile per uomini ${ageBracket(age)} anni.`),
+      ),
+
+      // HRR
+      el('div', { class: 'result-card', style: `border-left-color: ${hrrCat?.color || '#3b82f6'}` },
+        el('div', { class: 'result-label' }, 'HR Recovery 1 min'),
+        el('div', { class: 'result-value' }, `-${hrrDrop} bpm`),
+        el('div', { class: 'result-cat', style: `color: ${hrrCat?.color}` }, hrrCat?.label || ''),
+        el('div', { class: 'result-help' }, hrrCat?.risk || ''),
+      ),
+
+      // Strength
+      el('div', { class: 'result-card', style: `border-left-color: ${strAssess.level === 'advanced' ? '#a855f7' : strAssess.level === 'returning' ? '#10b981' : '#f59e0b'}` },
+        el('div', { class: 'result-label' }, 'Livello forza'),
+        el('div', { class: 'result-value' }, strAssess.label),
+        el('div', { class: 'result-help' }, `Score medio: ${strAssess.avg}/4 (push-up: ${strAssess.score.push}, squat: ${strAssess.score.squat}, plank: ${strAssess.score.plank})`),
+      ),
+
+      // Pace target Z2
+      pace ? el('div', { class: 'result-card', style: 'border-left-color: #10b981' },
+        el('div', { class: 'result-label' }, 'Passo target Zone 2 (fat-burning)'),
+        el('div', { class: 'result-value' }, `${formatPaceMinKm(pace.minPerKm.min)} – ${formatPaceMinKm(pace.minPerKm.max)} min/km`),
+        el('div', { class: 'result-help' }, `Velocità ${pace.kmh.min}-${pace.kmh.max} km/h. Per la corsa lenta delle sessioni Long Z2.`),
+      ) : null,
+
+      // Calibration summary
+      el('div', { class: 'result-card calibration-summary' },
+        el('div', { class: 'result-label' }, '⚙️ Calibrazione consigliata'),
+        el('div', { class: 'calib-item' }, `Programma corsa: parti da settimana ${calib.runWeek}`),
+        el('div', { class: 'calib-item' }, `Volume settimanale: ${calib.weeklyVolume} sessioni/settimana`),
+        el('div', { class: 'calib-item' }, `Programma forza: livello ${calib.strengthLevel}, settimana ${calib.strengthWeek}`),
+        el('div', { class: 'calib-item' }, `Zone 2 cardiaca: ${calib.z2Range.min}-${calib.z2Range.max} bpm`),
+        el('div', { class: 'calib-item' }, `HRmax di riferimento: ${calib.hrMax} bpm`),
+      ),
+
+      el('div', { class: 'btn-row', style: 'margin-top: 20px;' },
+        el('button', { class: 'btn btn-ghost', onclick: close }, 'Salva senza calibrare'),
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: () => applyCalibration({ vo2, vo2Cat, hrrDrop, hrrCat, strAssess, calib, walkTest: wt, strengthTest: st }),
+        }, 'Applica calibrazione →'),
+      ),
+    );
+  }
+
+  modal.appendChild(el('div', { class: 'modal-content assessment-content' },
+    el('div', { class: 'modal-body' }, content),
+  ));
+}
+
+function applyCalibration({ vo2, vo2Cat, hrrDrop, hrrCat, strAssess, calib, walkTest, strengthTest }) {
+  // Salva assessment
+  saveAssessment({
+    done: true,
+    walkTest: { ...walkTest, date: new Date().toISOString() },
+    strengthTest: { ...strengthTest, date: new Date().toISOString() },
+    results: {
+      vo2max: vo2,
+      vo2Cat,
+      hrrDrop,
+      hrrCat,
+      strengthLevel: strAssess.level,
+      strengthScore: strAssess,
+      hrMax: calib.hrMax,
+      z2Range: calib.z2Range,
+      paceZ2: suggestedZ2Pace(vo2),
+    },
+  });
+
+  // Aggiorna profilo
+  const profile = getProfile();
+  profile.strengthLevel = calib.strengthLevel;
+  profile.strengthEnabled = calib.strengthEnabled;
+  saveProfile(profile);
+
+  // Aggiorna progress
+  const progress = getProgress();
+  progress.currentWeek = calib.runWeek;
+  progress.currentSessionIndex = 0;
+  progress.weeklyVolume = calib.weeklyVolume;
+  progress.strengthWeek = calib.strengthWeek;
+  progress.strengthSessionIndex = 0;
+  saveProgress(progress);
+
+  $('#modal').classList.remove('open', 'assessment-modal');
+  toast('🎯 Calibrazione applicata!');
+  setView('home');
+}
+
+function testOverviewCard(icon, title, dur, desc) {
+  return el('div', { class: 'test-overview-card' },
+    el('div', { class: 'toc-icon' }, icon),
+    el('div', { class: 'toc-content' },
+      el('div', { class: 'toc-title' }, title),
+      el('div', { class: 'toc-dur' }, dur),
+      el('div', { class: 'toc-desc' }, desc),
+    ),
+  );
+}
+
+function strengthTestRow(icon, name, desc, inputEl) {
+  return el('div', { class: 'strength-test-row' },
+    el('div', { class: 'strength-test-icon' }, icon),
+    el('div', { class: 'strength-test-info' },
+      el('div', { class: 'strength-test-name' }, name),
+      el('div', { class: 'strength-test-desc' }, desc),
+    ),
+    el('div', { class: 'strength-test-input' }, inputEl),
+  );
+}
+
+function inputField(label, value, onchange, type = 'text', placeholder = '') {
+  const i = el('input', {
+    type, value: value ?? '', placeholder,
+    class: 'feedback-input',
+    inputmode: type === 'number' ? 'numeric' : 'text',
+  });
+  i.addEventListener('input', e => onchange(e.target.value));
+  return label
+    ? el('div', { class: 'field' }, el('label', { class: 'feedback-label' }, label), i)
+    : i;
+}
+
+function parseTimeMinSec(str) {
+  if (!str) return null;
+  if (str.includes(':')) {
+    const [m, s] = str.split(':').map(n => parseInt(n) || 0);
+    return m + s / 60;
+  }
+  const n = parseFloat(str);
+  return isNaN(n) ? null : n;
+}
+
+function formatPaceMinKm(v) {
+  const m = Math.floor(v);
+  const s = Math.round((v - m) * 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function ageBracket(age) {
+  if (age < 30) return '20-29';
+  if (age < 40) return '30-39';
+  if (age < 50) return '40-49';
+  if (age < 60) return '50-59';
+  return '60+';
 }
 
 // ============================================================================
@@ -1526,6 +1875,25 @@ function renderProfile() {
   const zones = getZones();
 
   container.appendChild(el('h2', { class: 'view-title' }, 'Profilo & Impostazioni'));
+
+  // Card Assessment
+  const assessment = getAssessment();
+  if (assessment.done && assessment.results) {
+    const r = assessment.results;
+    container.appendChild(el('div', { class: 'card' },
+      el('div', { class: 'card-label' }, '🏁 Test iniziale completato'),
+      el('div', { class: 'help-text' },
+        `VO₂max: ${r.vo2max} (${r.vo2Cat?.label}) · HRR: -${r.hrrDrop} bpm (${r.hrrCat?.label}) · Forza: ${r.strengthLevel}`,
+      ),
+      el('button', { class: 'btn btn-ghost', onclick: () => startAssessmentWizard() }, '↺ Rifai il test'),
+    ));
+  } else {
+    container.appendChild(el('div', { class: 'card' },
+      el('div', { class: 'card-label' }, '🏁 Test iniziale'),
+      el('div', { class: 'help-text' }, 'Non ancora completato. Falli per calibrare l\'app sui tuoi dati reali.'),
+      el('button', { class: 'btn btn-primary', onclick: () => startAssessmentWizard() }, 'Fai il test'),
+    ));
+  }
 
   // Profilo
   const nameInput = field('Nome', profile.name, (v) => updateProfile({ name: v }));
