@@ -1,5 +1,5 @@
 // RunFit Service Worker — offline-first cache shell
-const CACHE = 'runfit-v1';
+const CACHE = 'runfit-v2-strength';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   './program.js',
   './storage.js',
   './coach.js',
+  './strength.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

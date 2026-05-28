@@ -178,6 +178,182 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 /* Session next */
 .session-next { background: linear-gradient(135deg, var(--bg-elev), var(--bg-elev-2)); }
 
+/* ============================================================================
+   MODULO FORZA — tema viola/arancio per distinguere dalla corsa
+============================================================================ */
+:root {
+  --strength: #a855f7;      /* viola */
+  --strength-dim: #7e22ce;
+  --strength-bg: rgba(168, 85, 247, 0.12);
+  --strength-border: rgba(168, 85, 247, 0.35);
+}
+
+.strength-card {
+  background: linear-gradient(135deg, var(--bg-elev), var(--strength-bg));
+  border: 1px solid var(--strength-border);
+}
+.strength-label {
+  color: var(--strength) !important;
+  font-weight: 700 !important;
+}
+.strength-tip {
+  background: rgba(0,0,0,0.25);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 10px 0;
+  border-left: 3px solid var(--strength);
+}
+.btn-strength {
+  background: linear-gradient(135deg, var(--strength), var(--strength-dim));
+  color: white;
+  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.3);
+}
+.btn-strength:hover { box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4); }
+.chip-strength { background: var(--strength) !important; border-color: var(--strength) !important; }
+.strength-chips { margin-top: 12px; }
+
+/* Tema corpo durante sessione forza */
+body.session-strength .phase-display {
+  background: linear-gradient(135deg, var(--strength-bg), #1a2030);
+  border-color: var(--strength-border);
+}
+body.session-strength .btn-control.btn-strength {
+  background: linear-gradient(135deg, var(--strength), var(--strength-dim));
+}
+
+/* Esercizio item nell'anteprima */
+.exercise-item {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-elev-2);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  border-left: 3px solid var(--strength);
+}
+.exercise-icon {
+  width: 44px; height: 44px;
+  background: var(--strength-bg);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+}
+.exercise-info { min-width: 0; }
+.exercise-name { font-weight: 600; font-size: 0.95rem; }
+.exercise-muscle { color: var(--text-muted); font-size: 0.78rem; margin: 2px 0; }
+.exercise-form { color: var(--text-dim); font-size: 0.75rem; line-height: 1.4; margin-top: 4px; }
+.exercise-spec {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  color: var(--strength);
+  font-variant-numeric: tabular-nums;
+}
+.exercise-sets { font-weight: 700; font-size: 1rem; }
+.exercise-rest { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Schermata sessione forza */
+.phase-strength {
+  background: linear-gradient(135deg, var(--strength-bg), #1a2030);
+  border-color: var(--strength-border);
+}
+.strength-ex-name {
+  font-size: 1.8rem;
+  font-weight: 800;
+  margin: 6px 0 2px;
+  line-height: 1.1;
+}
+.strength-ex-variant {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+}
+.strength-big-counter {
+  font-size: 5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--strength);
+  line-height: 1;
+  margin: 10px 0 0;
+  text-shadow: 0 2px 12px rgba(168, 85, 247, 0.5);
+}
+.strength-counter-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.strength-set-info {
+  margin: 14px 0 6px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(0,0,0,0.25);
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 99px;
+  font-size: 0.9rem;
+}
+.strength-form-tip {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(0,0,0,0.25);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  text-align: left;
+}
+.strength-rest-display {
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--strength);
+  color: white;
+  border-radius: var(--radius);
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.strength-rep-row {
+  margin-top: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.strength-rep-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  flex: 1;
+}
+.strength-rep-input {
+  width: 100px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+/* Storico — distinzione forza vs corsa */
+.history-badge {
+  position: absolute;
+  top: 12px; right: 50px;
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.history-run .history-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.history-strength .history-badge {
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--strength);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+.history-strength { border-left: 3px solid var(--strength); }
+.history-run { border-left: 3px solid var(--accent); }
+.history-card { position: relative; padding-top: 36px; }
+
 /* --- Volume card --- */
 .volume-card { background: linear-gradient(135deg, var(--bg-elev), rgba(16,185,129,0.06)); }
 .volume-row { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 8px; }

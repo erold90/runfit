@@ -15,7 +15,11 @@ import {
   exportAllJson, importAllJson,
   cloudPush, cloudPull,
 } from './storage.js';
-import { SessionRunner, speak, loadVoices } from './coach.js';
+import { SessionRunner, StrengthRunner, speak, loadVoices } from './coach.js';
+import {
+  getStrengthWeekSessions, strengthWeekTip, nextStrengthWeek,
+  STRENGTH_TOTAL_WEEKS,
+} from './strength.js';
 
 // --- DOM helpers -----------------------------------------------------------
 const $ = sel => document.querySelector(sel);
@@ -53,6 +57,7 @@ const fmtDateShort = iso => {
 
 // --- State -----------------------------------------------------------------
 let currentRunner = null;
+let currentStrength = null;
 let currentView = 'home';
 
 // --- Profile helpers -------------------------------------------------------
@@ -191,6 +196,51 @@ function renderHome() {
     container.appendChild(el('div', { class: 'card empty-card' },
       el('div', {}, 'Registra il tuo peso per tracciare il dimagrimento.'),
       el('button', { class: 'btn btn-primary btn-sm', onclick: showWeightModal }, 'Aggiungi prima pesata'),
+    ));
+  }
+
+  // Card FORZA (separata visivamente con tema viola)
+  if (profile.strengthEnabled !== false) {
+    const sLevel = profile.strengthLevel || 'returning';
+    const sWeek = progress.strengthWeek || 1;
+    const sIdx = progress.strengthSessionIndex || 0;
+    const strengthSessions = getStrengthWeekSessions(sWeek, sLevel);
+    const sSession = strengthSessions[sIdx];
+    const sLetter = ['S1', 'S2', 'S3'][sIdx];
+
+    container.appendChild(el('div', { class: 'card strength-card' },
+      el('div', { class: 'card-label strength-label' }, `💪 Forza · ${sLetter} · ${sIdx + 1}/3 della settimana`),
+      el('div', { class: 'card-title' }, sSession.title),
+      el('div', { class: 'card-meta' },
+        el('span', {}, `~${sSession.estimatedMinutes} min`),
+        el('span', { class: 'dot' }, '·'),
+        el('span', {}, sSession.focus),
+        el('span', { class: 'dot' }, '·'),
+        el('span', {}, `Settimana ${sWeek}/${STRENGTH_TOTAL_WEEKS}`),
+      ),
+      el('div', { class: 'strength-tip' }, strengthWeekTip(sWeek, sLevel)),
+      el('div', { class: 'card-actions' },
+        el('button', {
+          class: 'btn btn-strength',
+          onclick: () => startStrengthSession(sSession),
+        }, 'Inizia forza'),
+        el('button', {
+          class: 'btn btn-ghost',
+          onclick: () => showStrengthPreview(sSession),
+        }, 'Anteprima'),
+      ),
+      // Chip selettore S1/S2/S3
+      el('div', { class: 'chip-row strength-chips' },
+        ...strengthSessions.map((s, i) => el('button', {
+          class: `chip ${i === sIdx ? 'chip-active chip-strength' : ''}`,
+          onclick: () => {
+            const pr = getProgress();
+            pr.strengthSessionIndex = i;
+            saveProgress(pr);
+            renderHome();
+          },
+        }, `${['S1','S2','S3'][i]} · ${s.estimatedMinutes}'`)),
+      ),
     ));
   }
 
@@ -778,6 +828,339 @@ function showResultsScreen(record, volumeChangeMessage = null) {
   ));
 }
 
+// ============================================================================
+// STRENGTH — preview, runner, feedback
+// ============================================================================
+function showStrengthPreview(session) {
+  const modal = $('#modal');
+  modal.innerHTML = '';
+  modal.classList.add('open');
+  modal.appendChild(el('div', { class: 'modal-content' },
+    el('div', { class: 'modal-header' },
+      el('h2', {}, session.title),
+      el('button', { class: 'icon-btn', onclick: () => modal.classList.remove('open') }, '×'),
+    ),
+    el('div', { class: 'modal-body' },
+      el('div', { class: 'session-focus' }, `${session.focus} · ~${session.estimatedMinutes} min`),
+      el('div', { class: 'phases-list' },
+        ...session.exercises.map((ex, i) => el('div', { class: 'exercise-item' },
+          el('div', { class: 'exercise-icon' }, ex.icon || '💪'),
+          el('div', { class: 'exercise-info' },
+            el('div', { class: 'exercise-name' }, ex.name),
+            el('div', { class: 'exercise-muscle' }, ex.muscle),
+            el('div', { class: 'exercise-form' }, ex.formTip),
+          ),
+          el('div', { class: 'exercise-spec' },
+            el('div', { class: 'exercise-sets' }, `${ex.sets}×${ex.reps}`),
+            el('div', { class: 'exercise-rest' }, `rest ${ex.restSec}s`),
+          ),
+        )),
+      ),
+      el('button', {
+        class: 'btn btn-strength btn-block',
+        onclick: () => { modal.classList.remove('open'); startStrengthSession(session); },
+      }, 'Inizia ora'),
+    ),
+  ));
+}
+
+function startStrengthSession(session) {
+  setView('workout');
+  document.body.classList.add('session-active');
+  document.body.classList.add('session-strength'); // tema viola
+  speak('Pronti per la forza?');
+  currentStrength = new StrengthRunner(session);
+  renderStrengthScreen(session);
+}
+
+function renderStrengthScreen(session) {
+  const container = $('#view-workout');
+  container.innerHTML = '';
+
+  // Stato visivo
+  const phaseLabel = el('div', { class: 'phase-label' }, 'Esercizio 1');
+  const exerciseName = el('div', { class: 'strength-ex-name' }, session.exercises[0].name);
+  const variantSub = el('div', { class: 'strength-ex-variant' }, session.exercises[0].muscle);
+  const formTipEl = el('div', { class: 'strength-form-tip' }, session.exercises[0].formTip);
+  const bigCounter = el('div', { class: 'strength-big-counter' }, `${session.exercises[0].reps}`);
+  const counterLabel = el('div', { class: 'strength-counter-label' }, 'ripetizioni');
+  const setNumberEl = el('div', { class: 'strength-set-info' }, `Serie 1 / ${session.exercises[0].sets}`);
+
+  const restDisplay = el('div', { class: 'strength-rest-display' });
+  restDisplay.style.display = 'none';
+
+  const totalProgress = el('div', { class: 'total-progress' });
+  const totalProgressBar = el('div', { class: 'total-progress-bar' });
+  totalProgress.appendChild(totalProgressBar);
+  const totalInfo = el('div', { class: 'total-info' },
+    el('span', { class: 'sets-done' }, `0 / ${currentStrength.totalSets} serie`),
+  );
+
+  // Pulsante principale: "Serie fatta" (cambia in "Salta rest" durante rest)
+  const mainBtn = el('button', { class: 'btn btn-strength btn-control' }, '✓ Serie fatta');
+  const repInput = el('input', {
+    type: 'number',
+    inputmode: 'numeric',
+    placeholder: `${session.exercises[0].reps}`,
+    class: 'feedback-input strength-rep-input',
+    min: '0', max: '200',
+  });
+  const stopBtn = el('button', {
+    class: 'btn btn-ghost btn-control btn-danger',
+    onclick: confirmStopStrength,
+  }, '✕');
+
+  mainBtn.addEventListener('click', () => {
+    if (currentStrength.state === 'restActive') {
+      currentStrength.skipRest();
+      return;
+    }
+    const actualReps = repInput.value ? parseInt(repInput.value) : currentStrength.currentExercise.reps;
+    currentStrength.setDone(actualReps);
+    repInput.value = '';
+  });
+
+  container.appendChild(el('div', { class: 'workout-screen' },
+    el('div', { class: 'workout-header' },
+      el('div', { class: 'session-title-small' }, session.title),
+      el('div', { class: 'session-focus-small' }, session.focus),
+    ),
+    el('div', { class: 'phase-display phase-strength' },
+      phaseLabel,
+      exerciseName,
+      variantSub,
+      bigCounter, counterLabel,
+      setNumberEl,
+      formTipEl,
+      restDisplay,
+    ),
+    el('div', { class: 'strength-rep-row' },
+      el('label', { class: 'strength-rep-label' }, 'Quante ne hai fatte?'),
+      repInput,
+    ),
+    totalProgress, totalInfo,
+    el('div', { class: 'controls' }, stopBtn, mainBtn, el('div')),
+    el('div', { class: 'controls-legend' },
+      el('span', {}, 'Termina'),
+      el('span', {}, 'Tap quando hai finito la serie'),
+      el('span', {}, ''),
+    ),
+  ));
+
+  // Listeners
+  currentStrength.addEventListener('setComplete', e => {
+    totalInfo.firstChild.textContent = `${currentStrength.completedCount} / ${currentStrength.totalSets} serie`;
+    totalProgressBar.style.width = `${currentStrength.progressPct}%`;
+  });
+  currentStrength.addEventListener('restStart', e => {
+    mainBtn.textContent = '⏭ Salta riposo';
+    restDisplay.style.display = 'block';
+    restDisplay.textContent = `Riposo: ${e.detail.seconds}s`;
+    repInput.style.display = 'none';
+  });
+  currentStrength.addEventListener('tick', e => {
+    restDisplay.textContent = `Riposo: ${e.detail.restRemaining}s`;
+  });
+  currentStrength.addEventListener('setStart', e => {
+    const ex = e.detail.exercise;
+    mainBtn.textContent = '✓ Serie fatta';
+    restDisplay.style.display = 'none';
+    repInput.style.display = '';
+    phaseLabel.textContent = `Esercizio ${currentStrength.exerciseIndex + 1} / ${session.exercises.length}`;
+    exerciseName.textContent = ex.name;
+    variantSub.textContent = ex.muscle;
+    formTipEl.textContent = ex.formTip;
+    bigCounter.textContent = `${ex.reps}`;
+    setNumberEl.textContent = `Serie ${e.detail.setNumber} / ${ex.sets}`;
+    repInput.setAttribute('placeholder', `${ex.reps}`);
+  });
+  currentStrength.addEventListener('finish', () => {
+    document.body.classList.remove('session-active');
+    document.body.classList.remove('session-strength');
+    showStrengthFeedbackForm(session);
+  });
+}
+
+function confirmStopStrength() {
+  if (confirm('Vuoi davvero terminare la sessione di forza?')) {
+    currentStrength.stop();
+    document.body.classList.remove('session-active');
+    document.body.classList.remove('session-strength');
+    showStrengthFeedbackForm(currentStrength.session, true);
+  }
+}
+
+function showStrengthFeedbackForm(session, interrupted = false) {
+  const container = $('#view-workout');
+  container.innerHTML = '';
+
+  const completedSets = currentStrength.completedSets.length;
+  const totalSets = currentStrength.totalSets;
+  const completion = completedSets / totalSets;
+  const durationSec = currentStrength.totalDurationSec;
+
+  const state = {
+    rpe: 6,
+    avgHr: '', maxHr: '',
+    activeKcal: '',
+    notes: '',
+  };
+
+  const rpeDisplay = el('div', { class: 'rpe-display' }, '6');
+  const rpeLabel = el('div', { class: 'rpe-label' }, rpeText(6));
+  const rpeSlider = el('input', {
+    type: 'range', min: '1', max: '10', value: '6', class: 'rpe-slider',
+  });
+  rpeSlider.addEventListener('input', e => {
+    state.rpe = parseInt(e.target.value);
+    rpeDisplay.textContent = state.rpe;
+    rpeLabel.textContent = rpeText(state.rpe);
+  });
+
+  const numInput = (key, placeholder, opts = {}) => {
+    const i = el('input', {
+      type: opts.type || 'number',
+      inputmode: opts.inputmode || 'numeric',
+      step: opts.step || '1', min: '0',
+      placeholder, class: 'feedback-input',
+    });
+    i.addEventListener('input', e => { state[key] = e.target.value; });
+    return i;
+  };
+
+  const notesInput = el('textarea', {
+    placeholder: 'Note (es. "12 rep invece di 10", "burpee duri")…',
+    class: 'feedback-input', rows: '3',
+  });
+  notesInput.addEventListener('input', e => { state.notes = e.target.value; });
+
+  container.appendChild(el('div', { class: 'feedback-screen' },
+    el('div', { class: 'feedback-header' },
+      el('div', { class: 'feedback-trophy' }, interrupted ? '⏸' : '💪'),
+      el('h2', {}, interrupted ? 'Sessione interrotta' : 'Forza completata!'),
+      el('div', { class: 'feedback-sub' }, `${Math.round(durationSec / 60)} min · ${completedSets}/${totalSets} serie · ${Math.round(completion * 100)}%`),
+    ),
+    el('div', { class: 'feedback-section' },
+      el('label', { class: 'feedback-label' }, 'Quanta fatica? (RPE 1-10)'),
+      el('div', { class: 'rpe-row' }, rpeDisplay, rpeLabel),
+      rpeSlider,
+      el('div', { class: 'rpe-scale' },
+        el('span', {}, '1 facile'),
+        el('span', {}, '5 medio'),
+        el('span', {}, '10 max'),
+      ),
+    ),
+    el('div', { class: 'feedback-section' },
+      el('label', { class: 'feedback-label' }, '📲 Dati Apple Watch — Allenamento di forza'),
+      el('div', { class: 'feedback-hint' }, 'Apri Fitness su iPhone: lì trovi FC media, max e calorie attive per Functional/Traditional Strength Training.'),
+      el('div', { class: 'feedback-grid' },
+        fieldWrap('FC media', numInput('avgHr', '125', { max: '220' }), 'bpm'),
+        fieldWrap('FC max', numInput('maxHr', '155', { max: '220' }), 'bpm'),
+        fieldWrap('Calorie attive', numInput('activeKcal', '90'), 'kcal'),
+      ),
+    ),
+    el('div', { class: 'feedback-section' },
+      el('label', { class: 'feedback-label' }, 'Note'),
+      notesInput,
+    ),
+    el('button', {
+      class: 'btn btn-strength btn-block btn-large',
+      onclick: () => saveStrengthFeedback({
+        session, interrupted, completion,
+        rpe: state.rpe,
+        avgHr: parseIntOrNull(state.avgHr),
+        maxHr: parseIntOrNull(state.maxHr),
+        activeKcal: parseIntOrNull(state.activeKcal),
+        notes: state.notes,
+        completedSets,
+        totalSets,
+        durationSec,
+        completedSetsLog: currentStrength.completedSets,
+      }),
+    }, 'Salva e continua'),
+  ));
+}
+
+function saveStrengthFeedback(args) {
+  const {
+    session, interrupted, completion, rpe, avgHr, maxHr, activeKcal,
+    notes, completedSets, totalSets, durationSec, completedSetsLog,
+  } = args;
+  const profile = getProfile();
+  const progress = getProgress();
+  const durationMin = durationSec / 60;
+
+  // Calorie: priorità Apple Watch, fallback Keytel, fallback stima ~6 MET
+  let kcal;
+  let kcalSource;
+  if (activeKcal) {
+    kcal = activeKcal;
+    kcalSource = 'apple-watch';
+  } else if (avgHr) {
+    kcal = kcalKeytel({
+      avgHr, weightKg: profile.weightCurrentKg, age: getAge(),
+      durationMin, isMale: profile.isMale,
+    });
+    kcalSource = 'keytel';
+  } else {
+    // MET medio per forza dinamica bodyweight ~6
+    kcal = Math.round(6 * profile.weightCurrentKg * (durationMin / 60));
+    kcalSource = 'met';
+  }
+
+  const record = {
+    id: `s-${Date.now()}`,
+    completedAt: new Date().toISOString(),
+    type: 'strength',
+    week: progress.strengthWeek,
+    sessionIndex: progress.strengthSessionIndex,
+    sessionId: session.id,
+    title: session.title,
+    focus: session.focus,
+    durationSec,
+    durationMin: Math.round(durationMin * 10) / 10,
+    completion: Math.round(completion * 100) / 100,
+    rpe, avgHr, maxHr, notes,
+    completedSets, totalSets,
+    completedSetsLog,
+    kcal, kcalSource,
+    interrupted,
+  };
+  saveSession(record);
+
+  // Avanza posizione: prossima sessione di forza, se ultima della settimana avanza settimana
+  if (progress.strengthSessionIndex < 2) {
+    progress.strengthSessionIndex++;
+  } else {
+    progress.strengthWeek = nextStrengthWeek(progress.strengthWeek, {
+      rpe, completedSets, totalSets,
+    });
+    progress.strengthSessionIndex = 0;
+  }
+  saveProgress(progress);
+
+  showStrengthResultsScreen(record);
+}
+
+function showStrengthResultsScreen(record) {
+  const container = $('#view-workout');
+  container.innerHTML = '';
+  container.appendChild(el('div', { class: 'results-screen' },
+    el('div', { class: 'results-trophy' }, '💪'),
+    el('h2', {}, 'Forza completata!'),
+    el('div', { class: 'results-grid' },
+      kpiCard('Tempo', `${record.durationMin}'`, '⏱'),
+      kpiCard('Serie', `${record.completedSets}/${record.totalSets}`, '✓'),
+      kpiCard('Calorie', `${record.kcal || '—'}`, '🔋'),
+      kpiCard('RPE', record.rpe, '💪'),
+    ),
+    el('div', { class: 'results-actions' },
+      el('button', { class: 'btn btn-strength', onclick: () => setView('home') }, 'Torna alla Home'),
+      el('button', { class: 'btn btn-ghost', onclick: () => setView('stats') }, 'Vedi statistiche'),
+    ),
+  ));
+}
+
 function renderWorkout() {
   // Se non c'è una sessione attiva, mostra splash invito
   if (!currentRunner || !currentRunner.running) {
@@ -819,8 +1202,10 @@ function renderHistory() {
 }
 
 function historyCard(s) {
+  const isStrength = s.type === 'strength';
   const pace = s.paceSecPerKm ? fmtPace(s.paceSecPerKm) : null;
-  return el('div', { class: 'card history-card' },
+  return el('div', { class: `card history-card ${isStrength ? 'history-strength' : 'history-run'}` },
+    el('div', { class: 'history-badge' }, isStrength ? '💪 Forza' : '🏃 Corsa'),
     el('div', { class: 'history-card-head' },
       el('div', { class: 'history-card-title' }, s.title),
       el('div', { class: 'history-card-date' }, fmtDate(s.completedAt)),
@@ -829,6 +1214,8 @@ function historyCard(s) {
       el('span', {}, `${s.durationMin}'`),
       el('span', { class: 'dot' }, '·'),
       el('span', {}, `RPE ${s.rpe}`),
+      isStrength && s.totalSets ? el('span', { class: 'dot' }, '·') : null,
+      isStrength && s.totalSets ? el('span', {}, `${s.completedSets || 0}/${s.totalSets} serie`) : null,
       s.avgHr ? el('span', { class: 'dot' }, '·') : null,
       s.avgHr ? el('span', {}, `${s.avgHr}${s.maxHr ? '/' + s.maxHr : ''} bpm`) : null,
       s.kcal ? el('span', { class: 'dot' }, '·') : null,
@@ -1157,6 +1544,29 @@ function renderProfile() {
     el('div', { class: 'card-label' }, 'Dati personali'),
     nameInput, yearInput, sexSelect, heightInput,
     wStartInput, wCurInput, wTgtInput, restHrInput, hrMaxInput,
+  ));
+
+  // Modulo Forza
+  container.appendChild(el('div', { class: 'card' },
+    el('div', { class: 'card-label' }, '💪 Modulo Forza'),
+    el('div', { class: 'help-text' }, 'Programma 8 settimane × 3 sessioni dinamiche bodyweight. Tutti esercizi senza pesi.'),
+    selectField('Livello di partenza forza', profile.strengthLevel || 'returning', [
+      { value: 'beginner', label: 'Beginner — mai allenato' },
+      { value: 'returning', label: 'Returning — ex allenato, fermo da tempo' },
+      { value: 'advanced', label: 'Advanced — allenato regolarmente' },
+    ], v => updateProfile({ strengthLevel: v })),
+    toggleField('Modulo forza attivo nella Home', profile.strengthEnabled !== false, v => updateProfile({ strengthEnabled: v })),
+    el('div', { class: 'help-text' }, `Sei in settimana ${getProgress().strengthWeek || 1}/${STRENGTH_TOTAL_WEEKS} forza, sessione ${['S1','S2','S3'][getProgress().strengthSessionIndex || 0]}.`),
+    el('button', { class: 'btn btn-ghost', onclick: () => {
+      if (confirm('Vuoi tornare alla settimana 1 della forza?')) {
+        const pr = getProgress();
+        pr.strengthWeek = 1;
+        pr.strengthSessionIndex = 0;
+        saveProgress(pr);
+        renderProfile();
+        toast('Programma forza resettato');
+      }
+    } }, '↺ Ricomincia programma forza'),
   ));
 
   // Zone HR

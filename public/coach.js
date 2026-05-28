@@ -125,6 +125,121 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// ============================================================================
+// STRENGTH RUNNER — gestisce sessioni di forza (esercizi × set × reps + rest)
+// ============================================================================
+//   stati: idle → setActive (utente esegue) → restActive (countdown rest)
+//   eventi: 'tick' (rest), 'setComplete', 'exerciseComplete', 'finish'
+// ============================================================================
+export class StrengthRunner extends EventTarget {
+  constructor(session) {
+    super();
+    this.session = session;
+    this.exerciseIndex = 0;
+    this.setIndex = 0;          // 0..sets-1
+    this.completedSets = [];    // log delle serie complete: { exercise, set, reps, rpe }
+    this.state = 'setActive';   // 'setActive' | 'restActive' | 'done'
+    this.restRemaining = 0;
+    this.restTimer = null;
+    this.startedAt = Date.now();
+  }
+
+  get currentExercise() { return this.session.exercises[this.exerciseIndex]; }
+  get totalSets() { return this.session.exercises.reduce((s, e) => s + e.sets, 0); }
+  get completedCount() { return this.completedSets.length; }
+  get progressPct() { return (this.completedCount / this.totalSets) * 100; }
+  get totalDurationSec() { return Math.round((Date.now() - this.startedAt) / 1000); }
+
+  /** Chiamato quando l'utente preme "Serie fatta" */
+  setDone(actualReps) {
+    if (this.state !== 'setActive') return;
+    const ex = this.currentExercise;
+    this.completedSets.push({
+      exerciseKey: ex.key,
+      exerciseName: ex.name,
+      setNumber: this.setIndex + 1,
+      targetReps: ex.reps,
+      actualReps: actualReps == null ? ex.reps : actualReps,
+    });
+    this.dispatchEvent(new CustomEvent('setComplete', {
+      detail: { exercise: ex, setNumber: this.setIndex + 1, completedCount: this.completedCount },
+    }));
+    // Ultima serie dell'ultimo esercizio? finito
+    const isLastSetOfExercise = this.setIndex + 1 >= ex.sets;
+    const isLastExercise = this.exerciseIndex + 1 >= this.session.exercises.length;
+    if (isLastSetOfExercise && isLastExercise) {
+      this.state = 'done';
+      fxFinish();
+      vibrate([200, 100, 200, 100, 400]);
+      speak('Sessione di forza completata. Ottimo lavoro!');
+      this.dispatchEvent(new CustomEvent('finish'));
+      return;
+    }
+    // Avanza
+    if (isLastSetOfExercise) {
+      this.exerciseIndex++;
+      this.setIndex = 0;
+      // Rest tra esercizi: usa il rest dell'esercizio appena finito
+      this._startRest(ex.restSec, true);
+    } else {
+      this.setIndex++;
+      this._startRest(ex.restSec, false);
+    }
+  }
+
+  /** Salta il rest immediatamente */
+  skipRest() {
+    if (this.state !== 'restActive') return;
+    clearInterval(this.restTimer);
+    this.restRemaining = 0;
+    this._goToSetActive();
+  }
+
+  /** Ferma tutto (per cleanup) */
+  stop() {
+    clearInterval(this.restTimer);
+    releaseWakeLock();
+    speechSynthesis.cancel();
+  }
+
+  _startRest(secs, isExerciseChange) {
+    this.state = 'restActive';
+    this.restRemaining = secs;
+    fxPhaseChange();
+    vibrate([100, 50, 100]);
+    if (isExerciseChange) {
+      const next = this.currentExercise;
+      speak(`Riposo ${secs} secondi. Prossimo: ${next.name}, ${next.sets} serie da ${next.reps} ripetizioni.`);
+    } else {
+      speak(`Riposo ${secs} secondi. Serie ${this.setIndex + 1} di ${this.currentExercise.sets} in arrivo.`);
+    }
+    this.dispatchEvent(new CustomEvent('restStart', { detail: { seconds: secs } }));
+    acquireWakeLock();
+    this.restTimer = setInterval(() => {
+      this.restRemaining--;
+      if (this.restRemaining === 3 || this.restRemaining === 2 || this.restRemaining === 1) {
+        fxCountdown();
+      }
+      this.dispatchEvent(new CustomEvent('tick', { detail: { restRemaining: this.restRemaining } }));
+      if (this.restRemaining <= 0) {
+        clearInterval(this.restTimer);
+        this._goToSetActive();
+      }
+    }, 1000);
+  }
+
+  _goToSetActive() {
+    this.state = 'setActive';
+    const ex = this.currentExercise;
+    fxPhaseChange();
+    vibrate([150]);
+    speak(`Vai! Serie ${this.setIndex + 1}.`);
+    this.dispatchEvent(new CustomEvent('setStart', {
+      detail: { exercise: ex, setNumber: this.setIndex + 1 },
+    }));
+  }
+}
+
 // --- Session runner (timer fase per fase) ----------------------------------
 /**
  * Runner per una sessione di allenamento.

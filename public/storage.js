@@ -31,6 +31,8 @@ const defaultProfile = {
   heightCm: 175,
   restingHr: 60,
   hrMaxOverride: null,
+  strengthLevel: 'returning', // 'beginner' | 'returning' | 'advanced'
+  strengthEnabled: true,
 };
 
 const defaultProgress = {
@@ -40,6 +42,9 @@ const defaultProgress = {
   startedAt: null,
   weekFeedbacks: [],       // feedback ultima settimana per algoritmo adattivo
   volumePromotedAt: null,  // settimana in cui è avvenuta l'ultima promozione (per UI)
+  // Programma FORZA (separato dalla corsa)
+  strengthWeek: 1,
+  strengthSessionIndex: 0, // 0=S1, 1=S2, 2=S3
 };
 
 const defaultSettings = {
