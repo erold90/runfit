@@ -437,6 +437,10 @@ function confirmStop() {
 }
 
 // --- Feedback dopo sessione -----------------------------------------------
+// Campi allineati al riassunto Apple Watch Series 9 "Corsa all'aperto":
+//   ESSENZIALI: RPE, FC media, FC max, calorie attive, distanza, passo medio
+//   AVANZATI:   tempo in Zone 2/3/4, cadenza, dislivello, lunghezza passo,
+//               oscillazione verticale, ground contact, potenza
 function showFeedbackForm(session, interrupted = false) {
   const container = $('#view-workout');
   container.innerHTML = '';
@@ -445,9 +449,19 @@ function showFeedbackForm(session, interrupted = false) {
     ? currentRunner.totalElapsed / session.totalSeconds
     : 1;
 
-  let rpeValue = 6;
-  let avgHrValue = '';
-  let distKmValue = '';
+  // Stato form
+  const state = {
+    rpe: 6,
+    avgHr: '', maxHr: '',
+    activeKcal: '',
+    km: '', paceMinPerKm: '',
+    timeZ2: '', timeZ3: '',
+    cadence: '', strideM: '',
+    elevationGain: '',
+    verticalOsc: '', groundContact: '',
+    runningPowerW: '',
+    notes: '',
+  };
 
   const rpeDisplay = el('div', { class: 'rpe-display' }, '6');
   const rpeLabel = el('div', { class: 'rpe-label' }, rpeText(6));
@@ -455,27 +469,63 @@ function showFeedbackForm(session, interrupted = false) {
     type: 'range', min: '1', max: '10', value: '6', class: 'rpe-slider',
   });
   rpeSlider.addEventListener('input', e => {
-    rpeValue = parseInt(e.target.value);
-    rpeDisplay.textContent = rpeValue;
-    rpeLabel.textContent = rpeText(rpeValue);
+    state.rpe = parseInt(e.target.value);
+    rpeDisplay.textContent = state.rpe;
+    rpeLabel.textContent = rpeText(state.rpe);
   });
 
-  const hrInput = el('input', {
-    type: 'number', placeholder: 'Es. 145', class: 'feedback-input',
-    inputmode: 'numeric', min: '40', max: '220',
-  });
-  hrInput.addEventListener('input', e => { avgHrValue = e.target.value; });
+  // Helper per generare input numerici "compatti"
+  const numInput = (key, placeholder, opts = {}) => {
+    const i = el('input', {
+      type: opts.type || 'number',
+      inputmode: opts.inputmode || 'decimal',
+      step: opts.step || '0.1',
+      min: '0',
+      placeholder,
+      class: 'feedback-input',
+      ...(opts.max ? { max: opts.max } : {}),
+    });
+    i.addEventListener('input', e => { state[key] = e.target.value; });
+    return i;
+  };
 
-  const kmInput = el('input', {
-    type: 'number', placeholder: 'Es. 3.2', class: 'feedback-input',
-    inputmode: 'decimal', step: '0.1', min: '0',
+  // Sezione essenziali — campi che il Watch mostra in 2 swipe a fine sessione
+  const essentials = el('div', { class: 'feedback-grid' },
+    fieldWrap('FC media', numInput('avgHr', '145', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
+    fieldWrap('FC max', numInput('maxHr', '168', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
+    fieldWrap('Calorie attive', numInput('activeKcal', '180', { type: 'number', inputmode: 'numeric', step: '1' }), 'kcal'),
+    fieldWrap('Distanza', numInput('km', '3.2', { step: '0.01' }), 'km'),
+    fieldWrap('Passo medio', paceInput(state), 'min/km'),
+    fieldWrap('Dislivello', numInput('elevationGain', '12', { type: 'number', inputmode: 'numeric', step: '1' }), 'm'),
+  );
+
+  // Sezione avanzati (collapsible)
+  const advancedContent = el('div', { class: 'feedback-grid advanced-grid' },
+    fieldWrap('Tempo Z2', numInput('timeZ2', '8', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+    fieldWrap('Tempo Z3', numInput('timeZ3', '5', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+    fieldWrap('Cadenza media', numInput('cadence', '165', { type: 'number', inputmode: 'numeric', step: '1' }), 'spm'),
+    fieldWrap('Lunghezza passo', numInput('strideM', '1.05', { step: '0.01' }), 'm'),
+    fieldWrap('Oscillaz. vert.', numInput('verticalOsc', '8.5', { step: '0.1' }), 'cm'),
+    fieldWrap('Tempo a terra', numInput('groundContact', '280', { type: 'number', inputmode: 'numeric', step: '1' }), 'ms'),
+    fieldWrap('Potenza media', numInput('runningPowerW', '220', { type: 'number', inputmode: 'numeric', step: '1' }), 'W'),
+  );
+  const advancedToggle = el('button', {
+    class: 'advanced-toggle',
+    type: 'button',
+  }, '▼ Dettagli avanzati Apple Watch (opzionale)');
+  let advancedOpen = false;
+  advancedContent.style.display = 'none';
+  advancedToggle.addEventListener('click', () => {
+    advancedOpen = !advancedOpen;
+    advancedContent.style.display = advancedOpen ? 'grid' : 'none';
+    advancedToggle.textContent = (advancedOpen ? '▲ Nascondi' : '▼ Dettagli avanzati Apple Watch (opzionale)');
   });
-  kmInput.addEventListener('input', e => { distKmValue = e.target.value; });
 
   const notesInput = el('textarea', {
-    placeholder: 'Note libere (umore, condizioni, percezioni)...',
+    placeholder: 'Note libere (umore, condizioni, percezioni)…',
     class: 'feedback-input', rows: '3',
   });
+  notesInput.addEventListener('input', e => { state.notes = e.target.value; });
 
   container.appendChild(el('div', { class: 'feedback-screen' },
     el('div', { class: 'feedback-header' },
@@ -494,12 +544,13 @@ function showFeedbackForm(session, interrupted = false) {
       ),
     ),
     el('div', { class: 'feedback-section' },
-      el('label', { class: 'feedback-label' }, 'FC media (dal tuo Apple Watch)'),
-      hrInput,
+      el('label', { class: 'feedback-label' }, '📲 Dati dall\'Apple Watch (essenziali)'),
+      el('div', { class: 'feedback-hint' }, 'Apri Salute o Fitness sul telefono e copia da lì — è più rapido che digitare dal polso.'),
+      essentials,
     ),
     el('div', { class: 'feedback-section' },
-      el('label', { class: 'feedback-label' }, 'Distanza percorsa (km, opzionale)'),
-      kmInput,
+      advancedToggle,
+      advancedContent,
     ),
     el('div', { class: 'feedback-section' },
       el('label', { class: 'feedback-label' }, 'Note'),
@@ -508,14 +559,83 @@ function showFeedbackForm(session, interrupted = false) {
     el('button', {
       class: 'btn btn-primary btn-block btn-large',
       onclick: () => saveFeedbackAndAdvance({
-        session, completion, rpe: rpeValue,
-        avgHr: avgHrValue ? parseInt(avgHrValue) : null,
-        km: distKmValue ? parseFloat(distKmValue) : null,
-        notes: notesInput.value,
-        interrupted,
+        session, completion, interrupted,
+        rpe: state.rpe,
+        avgHr: parseIntOrNull(state.avgHr),
+        maxHr: parseIntOrNull(state.maxHr),
+        activeKcal: parseIntOrNull(state.activeKcal),
+        km: parseFloatOrNull(state.km),
+        paceSecPerKm: parsePaceToSec(state.paceMinPerKm),
+        timeInZoneSec: {
+          z2: minToSec(parseFloatOrNull(state.timeZ2)),
+          z3: minToSec(parseFloatOrNull(state.timeZ3)),
+        },
+        cadence: parseIntOrNull(state.cadence),
+        strideM: parseFloatOrNull(state.strideM),
+        elevationGain: parseIntOrNull(state.elevationGain),
+        verticalOsc: parseFloatOrNull(state.verticalOsc),
+        groundContact: parseIntOrNull(state.groundContact),
+        runningPowerW: parseIntOrNull(state.runningPowerW),
+        notes: state.notes,
       }),
     }, 'Salva e continua'),
   ));
+}
+
+// Helper visivi e parser per il form Apple Watch
+function fieldWrap(label, inputEl, unit) {
+  return el('div', { class: 'field-mini' },
+    el('label', { class: 'field-mini-label' }, label),
+    el('div', { class: 'field-mini-input' },
+      inputEl,
+      unit ? el('span', { class: 'field-mini-unit' }, unit) : null,
+    ),
+  );
+}
+
+function paceInput(state) {
+  const i = el('input', {
+    type: 'text',
+    inputmode: 'decimal',
+    placeholder: '6:30',
+    class: 'feedback-input',
+    pattern: '[0-9:.]*',
+  });
+  i.addEventListener('input', e => { state.paceMinPerKm = e.target.value; });
+  return i;
+}
+
+function parsePaceToSec(str) {
+  if (!str) return null;
+  str = String(str).trim();
+  // formato "5:30" o "5.30"
+  let parts;
+  if (str.includes(':')) parts = str.split(':');
+  else if (str.includes('.')) {
+    const n = parseFloat(str);
+    return Math.round(n * 60); // 5.5 -> 330 sec
+  } else if (/^\d+$/.test(str)) {
+    return parseInt(str) * 60; // 5 -> 300 sec
+  } else return null;
+  const mins = parseInt(parts[0]) || 0;
+  const secs = parseInt(parts[1]) || 0;
+  return mins * 60 + secs;
+}
+
+function parseIntOrNull(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseInt(v, 10);
+  return isNaN(n) ? null : n;
+}
+
+function parseFloatOrNull(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+function minToSec(min) {
+  return min == null ? null : Math.round(min * 60);
 }
 
 function rpeText(v) {
@@ -527,21 +647,33 @@ function rpeText(v) {
   return 'Massimale — non si parla';
 }
 
-function saveFeedbackAndAdvance({ session, completion, rpe, avgHr, km, notes, interrupted }) {
+function saveFeedbackAndAdvance(args) {
+  const {
+    session, completion, interrupted,
+    rpe, avgHr, maxHr, activeKcal,
+    km, paceSecPerKm, timeInZoneSec,
+    cadence, strideM, elevationGain,
+    verticalOsc, groundContact, runningPowerW,
+    notes,
+  } = args;
   const profile = getProfile();
   const progress = getProgress();
   const durationSec = currentRunner.totalElapsed;
   const durationMin = durationSec / 60;
 
-  // Calorie: Keytel se HR disponibile, altrimenti MET medio
+  // Calorie: priorità ai dati Watch, poi Keytel (HR-based), poi MET fallback
   let kcal;
-  if (avgHr) {
+  let kcalSource;
+  if (activeKcal) {
+    kcal = activeKcal;
+    kcalSource = 'apple-watch';
+  } else if (avgHr) {
     kcal = kcalKeytel({
       avgHr, weightKg: profile.weightCurrentKg, age: getAge(),
       durationMin, isMale: profile.isMale,
     });
+    kcalSource = 'keytel';
   } else {
-    // Media ponderata MET basata su composizione sessione
     let total = 0;
     let elapsed = 0;
     for (const phase of session.phases) {
@@ -551,6 +683,7 @@ function saveFeedbackAndAdvance({ session, completion, rpe, avgHr, km, notes, in
       if (elapsed >= durationSec) break;
     }
     kcal = total;
+    kcalSource = 'met';
   }
 
   // Determina range zona target dominante della sessione
@@ -567,8 +700,18 @@ function saveFeedbackAndAdvance({ session, completion, rpe, avgHr, km, notes, in
     focus: session.focus,
     durationSec, durationMin: Math.round(durationMin * 10) / 10,
     completion: Math.round(completion * 100) / 100,
-    rpe, avgHr, km, notes,
-    kcal,
+    // Soggettivo
+    rpe, notes,
+    // Apple Watch — base
+    avgHr, maxHr, km,
+    paceSecPerKm,         // secondi/km
+    elevationGain,
+    // Apple Watch — tempo in zone
+    timeInZoneSec,        // { z2, z3 }
+    // Apple Watch — forma di corsa
+    cadence, strideM, verticalOsc, groundContact, runningPowerW,
+    // Calorie
+    kcal, kcalSource,
     interrupted,
   };
   saveSession(record);
@@ -676,6 +819,7 @@ function renderHistory() {
 }
 
 function historyCard(s) {
+  const pace = s.paceSecPerKm ? fmtPace(s.paceSecPerKm) : null;
   return el('div', { class: 'card history-card' },
     el('div', { class: 'history-card-head' },
       el('div', { class: 'history-card-title' }, s.title),
@@ -686,11 +830,17 @@ function historyCard(s) {
       el('span', { class: 'dot' }, '·'),
       el('span', {}, `RPE ${s.rpe}`),
       s.avgHr ? el('span', { class: 'dot' }, '·') : null,
-      s.avgHr ? el('span', {}, `${s.avgHr} bpm`) : null,
+      s.avgHr ? el('span', {}, `${s.avgHr}${s.maxHr ? '/' + s.maxHr : ''} bpm`) : null,
       s.kcal ? el('span', { class: 'dot' }, '·') : null,
-      s.kcal ? el('span', {}, `${s.kcal} kcal`) : null,
+      s.kcal ? el('span', { title: s.kcalSource === 'apple-watch' ? 'Da Apple Watch' : 'Stima' }, `${s.kcal} kcal${s.kcalSource === 'apple-watch' ? ' ⌚' : ''}`) : null,
       s.km ? el('span', { class: 'dot' }, '·') : null,
       s.km ? el('span', {}, `${s.km} km`) : null,
+      pace ? el('span', { class: 'dot' }, '·') : null,
+      pace ? el('span', {}, `${pace}/km`) : null,
+      s.cadence ? el('span', { class: 'dot' }, '·') : null,
+      s.cadence ? el('span', {}, `${s.cadence} spm`) : null,
+      s.elevationGain ? el('span', { class: 'dot' }, '·') : null,
+      s.elevationGain ? el('span', {}, `↗ ${s.elevationGain}m`) : null,
     ),
     s.notes ? el('div', { class: 'history-card-notes' }, s.notes) : null,
     el('button', {
@@ -698,6 +848,13 @@ function historyCard(s) {
       onclick: () => { if (confirm('Eliminare questa sessione?')) { deleteSession(s.id); renderHistory(); } },
     }, '🗑'),
   );
+}
+
+function fmtPace(secPerKm) {
+  if (!secPerKm) return '—';
+  const m = Math.floor(secPerKm / 60);
+  const s = secPerKm % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 // --- View: Statistiche ----------------------------------------------------
@@ -750,6 +907,35 @@ function renderStats() {
     container.appendChild(el('div', { class: 'card chart-card' },
       el('div', { class: 'card-label' }, 'Frequenza cardiaca media'),
       el('canvas', { id: 'chart-hr', height: '200' }),
+    ));
+  }
+
+  // Grafico Passo medio (min/km) — indicatore di efficienza/velocità
+  const withPace = sessions.filter(s => s.paceSecPerKm);
+  if (withPace.length > 0) {
+    container.appendChild(el('div', { class: 'card chart-card' },
+      el('div', { class: 'card-label' }, 'Passo medio (min/km)'),
+      el('canvas', { id: 'chart-pace', height: '200' }),
+    ));
+  }
+
+  // Grafico Tempo in Zona 2 — minuti totali settimanali in fat-burning
+  const withZ2 = sessions.filter(s => s.timeInZoneSec?.z2);
+  if (withZ2.length > 0) {
+    container.appendChild(el('div', { class: 'card chart-card' },
+      el('div', { class: 'card-label' }, 'Volume Zone 2 per settimana (min)'),
+      el('div', { class: 'chart-hint' }, 'Tempo speso nella zona 110-128 bpm — la zona regina per dimagrire'),
+      el('canvas', { id: 'chart-z2', height: '200' }),
+    ));
+  }
+
+  // Grafico Cadenza media
+  const withCad = sessions.filter(s => s.cadence);
+  if (withCad.length > 0) {
+    container.appendChild(el('div', { class: 'card chart-card' },
+      el('div', { class: 'card-label' }, 'Cadenza media (passi/min)'),
+      el('div', { class: 'chart-hint' }, 'Target ottimale: 170-180 spm per ridurre impatto al ginocchio'),
+      el('canvas', { id: 'chart-cad', height: '200' }),
     ));
   }
 
@@ -837,6 +1023,81 @@ function drawCharts(sessions) {
         }],
       },
       options: { plugins: { legend: { display: false } } },
+    });
+  }
+
+  // Pace (in min/km, asse Y in min decimali per leggibilità)
+  const ctxPace = $('#chart-pace')?.getContext('2d');
+  if (ctxPace) {
+    const withPace = sessions.filter(s => s.paceSecPerKm);
+    new Chart(ctxPace, {
+      type: 'line',
+      data: {
+        labels: withPace.map(s => fmtDateShort(s.completedAt)),
+        datasets: [{
+          label: 'min/km',
+          data: withPace.map(s => +(s.paceSecPerKm / 60).toFixed(2)),
+          borderColor: '#8b5cf6',
+          backgroundColor: '#8b5cf622',
+          tension: 0.3, fill: true, pointRadius: 4,
+        }],
+      },
+      options: {
+        plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: c => fmtPace(Math.round(c.parsed.y * 60)) + '/km' } },
+        },
+        scales: { y: { reverse: true, title: { display: true, text: 'min/km (più basso = più veloce)' } } },
+      },
+    });
+  }
+
+  // Volume Zone 2 (somma minuti Z2 per settimana di programma)
+  const ctxZ2 = $('#chart-z2')?.getContext('2d');
+  if (ctxZ2) {
+    const byWeekZ2 = {};
+    sessions.filter(s => s.timeInZoneSec?.z2).forEach(s => {
+      byWeekZ2[s.week] = (byWeekZ2[s.week] || 0) + (s.timeInZoneSec.z2 / 60);
+    });
+    const z2Labels = Object.keys(byWeekZ2).sort((a, b) => a - b);
+    new Chart(ctxZ2, {
+      type: 'bar',
+      data: {
+        labels: z2Labels.map(w => `Sett. ${w}`),
+        datasets: [{
+          label: 'min Z2',
+          data: z2Labels.map(w => Math.round(byWeekZ2[w])),
+          backgroundColor: '#10b981cc',
+          borderRadius: 6,
+        }],
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    });
+  }
+
+  // Cadenza
+  const ctxCad = $('#chart-cad')?.getContext('2d');
+  if (ctxCad) {
+    const withCad = sessions.filter(s => s.cadence);
+    new Chart(ctxCad, {
+      type: 'line',
+      data: {
+        labels: withCad.map(s => fmtDateShort(s.completedAt)),
+        datasets: [
+          {
+            label: 'Cadenza (spm)',
+            data: withCad.map(s => s.cadence),
+            borderColor: '#3b82f6',
+            backgroundColor: '#3b82f622',
+            tension: 0.3, fill: true, pointRadius: 4,
+          },
+          {
+            label: 'Target 170 spm',
+            data: withCad.map(() => 170),
+            borderColor: muted,
+            borderDash: [6, 4], pointRadius: 0, fill: false,
+          },
+        ],
+      },
     });
   }
 
