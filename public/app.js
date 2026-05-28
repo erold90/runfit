@@ -2,7 +2,10 @@
 // RunFit — App principale
 // ============================================================================
 
-import { PROGRAM, calcZones, calcHrMax, kcalKeytel, kcalFromMET, nextWeekIndex } from './program.js';
+import {
+  PROGRAM, calcZones, calcHrMax, kcalKeytel, kcalFromMET,
+  nextWeekIndex, getWeekSessions, evaluateVolumeChange,
+} from './program.js';
 import {
   getProfile, saveProfile,
   getProgress, saveProgress,
@@ -98,7 +101,14 @@ function renderHome() {
 
   const progress = getProgress();
   const week = PROGRAM[progress.currentWeek - 1];
-  const session = week.sessions[progress.currentSessionIndex];
+  const weeklyVolume = progress.weeklyVolume || 3;
+  const weekSessions = getWeekSessions(progress.currentWeek, weeklyVolume);
+  // Se l'indice è oltre il volume corrente (es. dopo un deload), riporta a 0
+  if (progress.currentSessionIndex >= weekSessions.length) {
+    progress.currentSessionIndex = 0;
+    saveProgress(progress);
+  }
+  const session = weekSessions[progress.currentSessionIndex];
   const sessions = getSessions();
   const weights = getWeights();
   const profile = getProfile();
@@ -125,8 +135,9 @@ function renderHome() {
   ));
 
   // Card prossima sessione
+  const sessionLetter = ['A', 'B', 'C', 'D', 'E'][progress.currentSessionIndex] || '?';
   const next = el('div', { class: 'card session-next' },
-    el('div', { class: 'card-label' }, `Prossima sessione · ${['A', 'B', 'C'][progress.currentSessionIndex]}`),
+    el('div', { class: 'card-label' }, `Prossima sessione · ${sessionLetter} · ${progress.currentSessionIndex + 1}/${weeklyVolume} della settimana`),
     el('div', { class: 'card-title' }, session.title),
     el('div', { class: 'card-meta' },
       el('span', {}, `${Math.round(session.totalSeconds / 60)} min`),
@@ -183,11 +194,26 @@ function renderHome() {
     ));
   }
 
-  // Selettore sessione settimana (chip)
+  // Card volume settimanale + adattamento
+  container.appendChild(el('div', { class: 'card volume-card' },
+    el('div', { class: 'card-label' }, 'Volume settimanale'),
+    el('div', { class: 'volume-row' },
+      el('div', { class: 'volume-value' }, `${weeklyVolume}`),
+      el('div', { class: 'volume-label' }, `sessioni / settimana`),
+    ),
+    el('div', { class: 'volume-help' }, volumeHelpText(weeklyVolume, progress.currentWeek)),
+    el('div', { class: 'volume-progress' },
+      ...[3, 4, 5].map(lvl => el('div', {
+        class: `volume-step ${weeklyVolume >= lvl ? 'reached' : ''} ${weeklyVolume === lvl ? 'current' : ''}`,
+      }, `${lvl}`)),
+    ),
+  ));
+
+  // Selettore sessione settimana (chip) — include sessione D ed E se sbloccate
   container.appendChild(el('div', { class: 'card week-sessions' },
     el('div', { class: 'card-label' }, `Tutte le sessioni — ${week.title.replace(/ — .+/, '')}`),
     el('div', { class: 'chip-row' },
-      ...week.sessions.map((s, i) => el('button', {
+      ...weekSessions.map((s, i) => el('button', {
         class: `chip ${i === progress.currentSessionIndex ? 'chip-active' : ''}`,
         onclick: () => {
           const pr = getProgress();
@@ -195,9 +221,21 @@ function renderHome() {
           saveProgress(pr);
           renderHome();
         },
-      }, `${['A', 'B', 'C'][i]} · ${Math.round(s.totalSeconds / 60)}'`)),
+      }, `${['A', 'B', 'C', 'D', 'E'][i]} · ${Math.round(s.totalSeconds / 60)}'`)),
     ),
   ));
+}
+
+function volumeHelpText(volume, week) {
+  if (volume === 3) {
+    if (week < 5) return `Default per principianti. Dalla settimana 5, se i tuoi RPE saranno ≤ 5.5 con sessioni complete, l'app passerà a 4 sessioni/settimana.`;
+    return `Sei pronto per il salto: continua a inserire FC media e RPE — quando i dati saranno costantemente buoni, sblocchi la 4ª sessione (Long Zone 2).`;
+  }
+  if (volume === 4) {
+    if (week < 8) return `4 sessioni sbloccate: la D è una Long Zone 2 per max ossidazione grassi. Dalla settimana 8, se RPE medio ≤ 6, sblocchi la 5ª.`;
+    return `Continua così: quando i dati confermeranno che gestisci 4 sessioni senza fatica, sblocchi la 5ª (Easy Recovery).`;
+  }
+  return `Volume massimo: 5 sessioni/settimana. L'app continua a monitorare i tuoi dati: se accumuli affaticamento, scenderà automaticamente a 4 per farti recuperare.`;
 }
 
 function kpiCard(label, value, icon) {
@@ -543,21 +581,38 @@ function saveFeedbackAndAdvance({ session, completion, rpe, avgHr, km, notes, in
   progress.weekFeedbacks = [...(progress.weekFeedbacks || []), fb];
 
   // Avanzamento posizione: prossima sessione, se ultima della settimana applica algoritmo
-  if (progress.currentSessionIndex < 2) {
+  const volume = progress.weeklyVolume || 3;
+  let volumeChangeMessage = null;
+
+  if (progress.currentSessionIndex < volume - 1) {
     progress.currentSessionIndex++;
   } else {
+    // Chiusura settimana: 1) avanza settimana col vecchio algoritmo, 2) valuta nuovo volume
     const newWeek = nextWeekIndex(progress.currentWeek, progress.weekFeedbacks);
     progress.currentWeek = newWeek;
     progress.currentSessionIndex = 0;
     progress.weekFeedbacks = []; // reset
+
+    // Auto-promozione / deload volume in base allo storico completo
+    const allSessions = getSessions();
+    const volEval = evaluateVolumeChange({
+      currentVolume: volume,
+      currentWeek: newWeek,
+      sessions: allSessions,
+    });
+    if (volEval.changed) {
+      progress.weeklyVolume = volEval.newVolume;
+      progress.volumePromotedAt = newWeek;
+      volumeChangeMessage = volEval.message;
+    }
   }
   saveProgress(progress);
 
   // Schermata risultati
-  showResultsScreen(record);
+  showResultsScreen(record, volumeChangeMessage);
 }
 
-function showResultsScreen(record) {
+function showResultsScreen(record, volumeChangeMessage = null) {
   const container = $('#view-workout');
   container.innerHTML = '';
   container.appendChild(el('div', { class: 'results-screen' },
@@ -569,6 +624,10 @@ function showResultsScreen(record) {
       kpiCard('RPE', record.rpe, '💪'),
       kpiCard('FC media', record.avgHr || '—', '❤️'),
     ),
+    volumeChangeMessage ? el('div', { class: 'volume-change-banner' },
+      el('div', { class: 'vc-icon' }, '📣'),
+      el('div', { class: 'vc-text' }, volumeChangeMessage),
+    ) : null,
     el('div', { class: 'results-actions' },
       el('button', { class: 'btn btn-primary', onclick: () => setView('home') }, 'Torna alla Home'),
       el('button', { class: 'btn btn-ghost', onclick: () => setView('stats') }, 'Vedi statistiche'),
@@ -880,13 +939,25 @@ function renderProfile() {
     ),
   ));
 
-  // Reset programma
+  // Programma & Volume
+  const curProgress = getProgress();
   container.appendChild(el('div', { class: 'card' },
     el('div', { class: 'card-label' }, 'Programma'),
-    el('div', { class: 'help-text' }, `Sei in settimana ${getProgress().currentWeek}/12, sessione ${['A','B','C'][getProgress().currentSessionIndex]}.`),
+    el('div', { class: 'help-text' }, `Sei in settimana ${curProgress.currentWeek}/12, sessione ${['A','B','C','D','E'][curProgress.currentSessionIndex]}, volume ${curProgress.weeklyVolume || 3}/settimana.`),
+    selectField('Volume settimanale (override)', String(curProgress.weeklyVolume || 3), [
+      { value: '3', label: '3 sessioni (default principianti)' },
+      { value: '4', label: '4 sessioni (con Long Z2)' },
+      { value: '5', label: '5 sessioni (con Easy Recovery)' },
+    ], v => {
+      const pr = getProgress();
+      pr.weeklyVolume = parseInt(v);
+      saveProgress(pr);
+      toast(`Volume impostato a ${v} sessioni/settimana`);
+    }),
+    el('div', { class: 'help-text' }, 'Se imposti manualmente il volume, l\'app continuerà comunque a valutarlo in base ai tuoi RPE/FC dopo ogni settimana.'),
     el('button', { class: 'btn btn-ghost', onclick: () => {
       if (confirm('Vuoi tornare alla settimana 1?')) {
-        saveProgress({ currentWeek: 1, currentSessionIndex: 0, weekFeedbacks: [], startedAt: null });
+        saveProgress({ currentWeek: 1, currentSessionIndex: 0, weekFeedbacks: [], startedAt: null, weeklyVolume: 3, volumePromotedAt: null });
         renderProfile();
       }
     } }, '↺ Ricomincia programma'),

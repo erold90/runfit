@@ -35,9 +35,11 @@ const defaultProfile = {
 
 const defaultProgress = {
   currentWeek: 1,
-  currentSessionIndex: 0,  // 0=A, 1=B, 2=C
+  currentSessionIndex: 0,  // 0=A, 1=B, 2=C, 3=D, 4=E
+  weeklyVolume: 3,         // 3 default, sale a 4 e poi 5 se i feedback lo permettono
   startedAt: null,
   weekFeedbacks: [],       // feedback ultima settimana per algoritmo adattivo
+  volumePromotedAt: null,  // settimana in cui è avvenuta l'ultima promozione (per UI)
 };
 
 const defaultSettings = {

@@ -178,6 +178,49 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 /* Session next */
 .session-next { background: linear-gradient(135deg, var(--bg-elev), var(--bg-elev-2)); }
 
+/* --- Volume card --- */
+.volume-card { background: linear-gradient(135deg, var(--bg-elev), rgba(16,185,129,0.06)); }
+.volume-row { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 8px; }
+.volume-value {
+  font-size: 2.4rem; font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--info));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+.volume-label { color: var(--text-muted); font-size: 0.95rem; }
+.volume-help { color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; margin-bottom: 12px; }
+.volume-progress { display: flex; gap: 8px; }
+.volume-step {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  background: var(--bg-elev-2);
+  border-radius: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  transition: all var(--transition);
+}
+.volume-step.reached { background: rgba(16,185,129,0.15); color: var(--accent); border-color: rgba(16,185,129,0.3); }
+.volume-step.current { background: var(--accent); color: white; border-color: var(--accent); transform: scale(1.05); }
+
+/* Volume change banner (mostrato nella results screen) */
+.volume-change-banner {
+  background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(59,130,246,0.18));
+  border: 1px solid rgba(16,185,129,0.3);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin: 16px 0;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  text-align: left;
+}
+.vc-icon { font-size: 1.5rem; flex-shrink: 0; }
+.vc-text { color: var(--text); font-size: 0.9rem; line-height: 1.5; flex: 1; }
+
 /* --- KPI grid --- */
 .kpi-grid {
   display: grid;

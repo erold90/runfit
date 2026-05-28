@@ -312,6 +312,159 @@ export const PROGRAM = [
   },
 ];
 
+// ============================================================================
+// SESSIONI EXTRA — generate dinamicamente quando il volume sale a 4 o 5
+// ============================================================================
+// D = Long Zone 2 (max fat oxidation), durata scala con la settimana
+// E = Easy recovery shakeout (sblocco/recupero, solo al volume 5)
+// ============================================================================
+
+/**
+ * Genera la sessione D (Long Zone 2) in base alla settimana corrente.
+ * Si attiva quando weeklyVolume >= 4.
+ */
+export function buildSessionD(weekIndex) {
+  // Durata Z2 scalata: parte da 25 min e cresce con la settimana
+  const z2Minutes = Math.min(45, 20 + Math.floor(weekIndex * 2)); // sett 6 -> 32', sett 12 -> 44'
+  // Per chi è ancora nelle settimane di walk-run (1-5), usiamo brisk-walk Z2 invece di jog
+  const useJog = weekIndex >= 5;
+  const middle = useJog
+    ? [jog(z2Minutes, 0, `Corsa lenta in Zona 2 per ${z2Minutes} minuti. Ritmo da chiacchierata completa, ${'massima ossidazione dei grassi'}.`)]
+    : [brisk(z2Minutes, 0, `Cammina veloce in Zona 2 per ${z2Minutes} minuti. Frequenza cardiaca 110-128 bpm.`)];
+  const phases = [warmup(5), ...middle, cooldown(5)];
+  const totalSeconds = phases.reduce((s, p) => s + p.seconds, 0);
+  return {
+    id: `w${weekIndex}-d`,
+    title: 'Sessione D — Long Zone 2',
+    focus: 'Max fat oxidation',
+    phases,
+    totalSeconds,
+  };
+}
+
+/**
+ * Genera la sessione E (Easy Recovery) in base alla settimana corrente.
+ * Si attiva quando weeklyVolume >= 5.
+ */
+export function buildSessionE(weekIndex) {
+  // Sessione corta di recupero, sempre Z1-Z2
+  const totalMid = weekIndex <= 4 ? 15 : 20;
+  const useJog = weekIndex >= 6;
+  const middle = useJog
+    ? [
+        brisk(3, 0, 'Inizia con passo veloce per attivare le gambe.'),
+        jog(totalMid - 6, 0, `Corsa lentissima per ${totalMid - 6} minuti, ritmo da sblocco.`),
+        brisk(3, 0, 'Chiudi con passo veloce per defaticare gradualmente.'),
+      ]
+    : [brisk(totalMid, 0, `Camminata veloce sciolta per ${totalMid} minuti, niente sforzi.`)];
+  const phases = [warmup(5), ...middle, cooldown(5)];
+  const totalSeconds = phases.reduce((s, p) => s + p.seconds, 0);
+  return {
+    id: `w${weekIndex}-e`,
+    title: 'Sessione E — Easy recovery',
+    focus: 'Recupero attivo',
+    phases,
+    totalSeconds,
+  };
+}
+
+/**
+ * Restituisce TUTTE le sessioni della settimana in base al volume corrente.
+ * @param {number} weekIndex 1-12
+ * @param {number} weeklyVolume 3, 4 o 5
+ */
+export function getWeekSessions(weekIndex, weeklyVolume = 3) {
+  const week = PROGRAM[weekIndex - 1];
+  const base = [...week.sessions];
+  if (weeklyVolume >= 4) base.push(buildSessionD(weekIndex));
+  if (weeklyVolume >= 5) base.push(buildSessionE(weekIndex));
+  return base;
+}
+
+// ============================================================================
+// AUTO-PROMOZIONE VOLUME SETTIMANALE
+// ============================================================================
+/**
+ * Decide se aumentare/diminuire/mantenere il volume settimanale.
+ * Si chiama quando si chiude una settimana (dopo l'ultima sessione).
+ *
+ * Trigger di promozione (3 -> 4):
+ *   - settimana corrente >= 5 (almeno 4 settimane di adattamento articolare)
+ *   - ultime 2 settimane: RPE medio <= 5.5 E completion media >= 95%
+ *   - nessuna sessione interrotta nelle ultime 2 settimane
+ *
+ * Trigger promozione (4 -> 5):
+ *   - settimana corrente >= 8 (almeno 2 settimane di volume 4 consolidato)
+ *   - ultime 2 settimane: RPE medio <= 6 E completion media >= 95%
+ *
+ * Trigger deload (-1 sessione):
+ *   - ultime 2 settimane: RPE medio >= 7.5 O almeno 1 sessione con RPE>=9 o completion<0.7
+ *
+ * Floor: 3. Ceiling: 5.
+ *
+ * @param {Object} args { currentVolume, currentWeek, sessions } sessions = storico
+ * @returns {Object} { newVolume, reason, changed }
+ */
+export function evaluateVolumeChange({ currentVolume, currentWeek, sessions }) {
+  if (!sessions || sessions.length === 0) {
+    return { newVolume: currentVolume, reason: null, changed: false };
+  }
+
+  // Ordina cronologicamente
+  const sorted = [...sessions].sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt));
+
+  // Prendi le sessioni delle ultime 2 settimane "vere" (per data, non per indice di programma)
+  const cutoff = Date.now() - 16 * 24 * 60 * 60 * 1000; // 16 giorni
+  const recent = sorted.filter(s => new Date(s.completedAt).getTime() >= cutoff);
+  if (recent.length < 4) {
+    return { newVolume: currentVolume, reason: 'dati-insufficienti', changed: false };
+  }
+
+  const avgRpe = recent.reduce((s, x) => s + (x.rpe || 0), 0) / recent.length;
+  const avgCompletion = recent.reduce((s, x) => s + (x.completion || 0), 0) / recent.length;
+  const anyHard = recent.some(x => (x.rpe || 0) >= 9 || (x.completion || 0) < 0.7);
+  const anyMedHard = recent.some(x => (x.rpe || 0) >= 8 || (x.completion || 0) < 0.8);
+
+  // 1) Deload trigger (priorità)
+  if (anyHard || avgRpe >= 7.5) {
+    if (currentVolume > 3) {
+      return {
+        newVolume: currentVolume - 1,
+        reason: 'deload',
+        message: `Volume ridotto a ${currentVolume - 1} sessioni: nelle ultime due settimane hai mostrato segnali di affaticamento (RPE medio ${avgRpe.toFixed(1)}).`,
+        changed: true,
+      };
+    }
+    return { newVolume: 3, reason: 'deload-floor', changed: false };
+  }
+
+  // 2) Promozione 3 -> 4
+  if (currentVolume === 3 && currentWeek >= 5) {
+    if (avgRpe <= 5.5 && avgCompletion >= 0.95 && !anyMedHard) {
+      return {
+        newVolume: 4,
+        reason: 'promote-3-to-4',
+        message: `🎉 Promosso a 4 sessioni/settimana! RPE medio ${avgRpe.toFixed(1)}, completion ${Math.round(avgCompletion * 100)}%. Aggiungo una Long Zone 2 (massima ossidazione grassi).`,
+        changed: true,
+      };
+    }
+  }
+
+  // 3) Promozione 4 -> 5
+  if (currentVolume === 4 && currentWeek >= 8) {
+    if (avgRpe <= 6.0 && avgCompletion >= 0.95 && !anyMedHard) {
+      return {
+        newVolume: 5,
+        reason: 'promote-4-to-5',
+        message: `🚀 Promosso a 5 sessioni/settimana! Aggiungo una Easy Recovery di sblocco. Sei un atleta vero adesso.`,
+        changed: true,
+      };
+    }
+  }
+
+  return { newVolume: currentVolume, reason: 'maintain', changed: false };
+}
+
 // --- Algoritmo adattivo ----------------------------------------------------
 /**
  * Decide cosa fare dopo una sessione completata.
