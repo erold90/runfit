@@ -5,3 +5,5 @@ node_modules/
 *.log
 worker/.wrangler/
 worker/node_modules/
+.memsearch/
+.claude/
