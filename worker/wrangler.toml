@@ -1,0 +1,16 @@
+name = "runfit-backup"
+main = "src/index.js"
+compatibility_date = "2026-05-01"
+workers_dev = true
+
+# Sostituisci con l'ID del tuo KV namespace dopo averlo creato:
+# wrangler kv namespace create BACKUP_KV
+# poi inserisci l'id qui sotto.
+[[kv_namespaces]]
+binding = "BACKUP_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# AUTH_TOKEN va impostato come secret (NON in chiaro):
+#   wrangler secret put AUTH_TOKEN
+# Genera un token forte:
+#   openssl rand -hex 32

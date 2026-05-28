@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0a0e1a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="RunFit" />
+  <meta name="description" content="Allenamento di corsa adattivo per dimagrimento, evidence-based" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>RunFit — Allenamento corsa adattivo</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="logo">
+      <div class="logo-icon">🏃</div>
+      <span>RunFit</span>
+    </div>
+    <div class="app-version">v1.0</div>
+  </header>
+
+  <main>
+    <section class="view active" data-view="home" id="view-home"></section>
+    <section class="view" data-view="workout" id="view-workout"></section>
+    <section class="view" data-view="history" id="view-history"></section>
+    <section class="view" data-view="stats" id="view-stats"></section>
+    <section class="view" data-view="profile" id="view-profile"></section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="home" aria-label="Home">
+      <span class="tab-icon">🏠</span>
+      <span>Home</span>
+    </button>
+    <button class="tab" data-view="workout" aria-label="Allenamento">
+      <span class="tab-icon">▶</span>
+      <span>Sessione</span>
+    </button>
+    <button class="tab" data-view="history" aria-label="Storico">
+      <span class="tab-icon">📋</span>
+      <span>Storico</span>
+    </button>
+    <button class="tab" data-view="stats" aria-label="Statistiche">
+      <span class="tab-icon">📊</span>
+      <span>Stats</span>
+    </button>
+    <button class="tab" data-view="profile" aria-label="Profilo">
+      <span class="tab-icon">⚙️</span>
+      <span>Profilo</span>
+    </button>
+  </nav>
+
+  <div id="modal"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
