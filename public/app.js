@@ -1193,7 +1193,9 @@ function showStrengthPreview(session) {
       el('div', { class: 'session-focus' }, `${session.focus} · ~${session.estimatedMinutes} min`),
       el('div', { class: 'phases-list' },
         ...session.exercises.map((ex, i) => el('div', { class: 'exercise-item' },
-          el('div', { class: 'exercise-icon' }, ex.icon || '💪'),
+          ex.gifUrl
+            ? el('img', { class: 'exercise-gif-thumb', src: ex.gifUrl, alt: ex.name, loading: 'lazy' })
+            : el('div', { class: 'exercise-icon' }, ex.icon || '💪'),
           el('div', { class: 'exercise-info' },
             el('div', { class: 'exercise-name' }, ex.name),
             el('div', { class: 'exercise-muscle' }, ex.muscle),
@@ -1231,6 +1233,14 @@ function renderStrengthScreen(session) {
   const exerciseName = el('div', { class: 'strength-ex-name' }, session.exercises[0].name);
   const variantSub = el('div', { class: 'strength-ex-variant' }, session.exercises[0].muscle);
   const formTipEl = el('div', { class: 'strength-form-tip' }, session.exercises[0].formTip);
+  // GIF dimostrativa grande
+  const gifEl = el('img', {
+    class: 'strength-gif',
+    src: session.exercises[0].gifUrl || '',
+    alt: session.exercises[0].name,
+    loading: 'eager',
+  });
+  if (!session.exercises[0].gifUrl) gifEl.style.display = 'none';
   const bigCounter = el('div', { class: 'strength-big-counter' }, `${session.exercises[0].reps}`);
   const counterLabel = el('div', { class: 'strength-counter-label' }, 'ripetizioni');
   const setNumberEl = el('div', { class: 'strength-set-info' }, `Serie 1 / ${session.exercises[0].sets}`);
@@ -1278,6 +1288,7 @@ function renderStrengthScreen(session) {
       phaseLabel,
       exerciseName,
       variantSub,
+      gifEl,
       bigCounter, counterLabel,
       setNumberEl,
       formTipEl,
@@ -1322,6 +1333,14 @@ function renderStrengthScreen(session) {
     bigCounter.textContent = `${ex.reps}`;
     setNumberEl.textContent = `Serie ${e.detail.setNumber} / ${ex.sets}`;
     repInput.setAttribute('placeholder', `${ex.reps}`);
+    // Aggiorna GIF dimostrativa
+    if (ex.gifUrl) {
+      gifEl.src = ex.gifUrl;
+      gifEl.alt = ex.name;
+      gifEl.style.display = '';
+    } else {
+      gifEl.style.display = 'none';
+    }
   });
   currentStrength.addEventListener('finish', () => {
     document.body.classList.remove('session-active');

@@ -22,6 +22,7 @@
 // ============================================================================
 
 // CATALOGO ESERCIZI (tutti bodyweight, tutti dinamici)
+// gifUrl: animazione dimostrativa da fitnessprogramer.com (verificata HTTP 200)
 const CATALOG = {
   // Lower body — squat pattern
   airSquat: {
@@ -29,24 +30,28 @@ const CATALOG = {
     icon: '🦵',
     muscle: 'Quadricipiti + glutei',
     formTip: 'Piedi larghezza spalle, peso sui talloni, scendi fino a cosce parallele. Esecuzione fluida e controllata.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/05/bodyweight-squat-full-version.gif',
   },
   squatJump: {
     name: 'Squat jump',
     icon: '🚀',
     muscle: 'Quadricipiti + glutei + esplosività',
     formTip: 'Air squat poi salto verso l\'alto. Atterra morbido sui piedi piegando le ginocchia, ricicla subito nel prossimo squat.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Jump-Squat.gif',
   },
   reverseLunge: {
     name: 'Affondi indietro alternati',
     icon: '🚶',
     muscle: 'Quadricipiti + glutei + stabilità',
     formTip: 'Un passo lungo indietro, ginocchio posteriore sfiora terra, torna su con potenza. Alterna le gambe.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2022/08/bodyweight-reverse-lunge.gif',
   },
   jumpingLunge: {
-    name: 'Jumping lunge',
+    name: 'Jumping lunge (power lunge)',
     icon: '⚡',
     muscle: 'Esplosività + glutei',
     formTip: 'Affondo, poi salto scambiando le gambe in aria, atterri nell\'affondo opposto. Mantieni il busto eretto.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2023/09/power-lunge.gif',
   },
 
   // Upper body — push pattern
@@ -55,24 +60,28 @@ const CATALOG = {
     icon: '💪',
     muscle: 'Petto + spalle + tricipiti',
     formTip: 'Corpo dritto come una tavola, mani sotto le spalle, scendi fino a sfiorare il pavimento, spingi su.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Push-Up.gif',
   },
   pushupKnee: {
     name: 'Piegamenti ginocchia',
     icon: '💪',
     muscle: 'Petto + spalle + tricipiti',
     formTip: 'Solo se le standard non escono pulite. Ginocchia a terra, corpo dritto dalle ginocchia in su.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2022/01/Kneeling-Push-up.gif',
   },
   plankToPushup: {
     name: 'Plank to push-up',
     icon: '🔄',
     muscle: 'Petto + core + spalle',
     formTip: 'Da plank avambracci, sali su una mano alla volta in posizione di push-up, poi scendi una mano alla volta.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/plank.gif', // fallback al plank base
   },
   diveBomber: {
-    name: 'Dive bomber',
+    name: 'Dive bomber (Hindu push-up)',
     icon: '🌊',
     muscle: 'Spalle + petto + flessibilità',
     formTip: 'Da downward dog, "tuffati" in avanti verso il pavimento e risali in cobra. Movimento fluido onda.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Pike-to-Cobra.gif',
   },
 
   // Hip hinge / posterior chain
@@ -81,38 +90,44 @@ const CATALOG = {
     icon: '🍑',
     muscle: 'Glutei + femorali',
     formTip: 'Sdraiato, ginocchia piegate, spingi pelvi su contraendo glutei in cima per 1 sec, scendi controllato. Niente pause.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Glute-Bridge-.gif',
   },
   singleLegBridge: {
     name: 'Ponte glutei singola gamba',
     icon: '🦵',
     muscle: 'Glutei singolarmente + stabilità',
     formTip: 'Una gamba sollevata, spingi su solo con l\'altro tallone. Glutei alti, blocca lì 1 secondo.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/06/Single-Leg-Bridge.gif',
   },
 
   // Core dinamico (no plank statico lungo)
   hollowRock: {
-    name: 'Hollow rocks',
+    name: 'Hollow hold/rocks',
     icon: '🥥',
     muscle: 'Core profondo',
     formTip: 'Schiena bassa premuta a terra, gambe e braccia tese sollevate. Dondola avanti e indietro mantenendo la "scodella".',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/HollowHold.png',
   },
   sitUp: {
     name: 'Sit-up',
     icon: '⬆️',
     muscle: 'Addominali frontali',
     formTip: 'Schiena curvilinea, sali fino a 90° col bacino, scendi controllando senza sbattere a terra.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Sit-ups.gif',
   },
   vUp: {
-    name: 'V-up',
+    name: 'V-up (Jackknife sit-up)',
     icon: 'V',
     muscle: 'Addominali totali',
     formTip: 'Dalla posizione supina, solleva contemporaneamente gambe tese e busto formando una V. Tocca le mani con i piedi.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Jackknife-Sit-ups.gif',
   },
   flutterKick: {
     name: 'Flutter kicks',
     icon: '〰️',
     muscle: 'Addominali bassi',
     formTip: 'Sdraiato, gambe sollevate ~15 cm da terra, alternale su-giù come a nuoto a stile libero.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Flutter-Kicks.gif',
   },
 
   // Conditioning / cardio integrato
@@ -121,36 +136,42 @@ const CATALOG = {
     icon: '🔥',
     muscle: 'Total body + cardio',
     formTip: 'Da in piedi: giù in plank, push-up, salta i piedi sotto, salto in alto. Movimento continuo.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/burpees.gif',
   },
   burpeeNoJump: {
     name: 'Burpee senza salto',
     icon: '🔥',
     muscle: 'Total body',
     formTip: 'Stessa sequenza ma senza salto finale: in piedi, mani a terra, piedi indietro, push-up, piedi avanti, sali.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/burpees.gif', // stesso pattern visivo
   },
   mountainClimber: {
     name: 'Mountain climber',
     icon: '⛰️',
     muscle: 'Core + cardio + spalle',
     formTip: 'In plank alto, alterna le ginocchia al petto rapidamente. Mantieni il bacino basso.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Mountain-climber.gif',
   },
   bearCrawl: {
     name: 'Bear crawl (avanti+indietro)',
     icon: '🐻',
     muscle: 'Total body + coordinazione',
     formTip: 'A quattro zampe ma ginocchia 1-2 cm da terra. Avanza opposti mano-piede per 3-4 metri, torna indietro.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Bear-Crawl.gif',
   },
   skaterJump: {
     name: 'Skater jumps',
     icon: '⛸️',
     muscle: 'Glutei laterali + esplosività',
     formTip: 'Salta lateralmente da una gamba all\'altra atterrando in mezzo-squat. Slancio con le braccia.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Skater.gif',
   },
   highKnees: {
-    name: 'High knees (sul posto)',
+    name: 'High knees',
     icon: '🏃',
     muscle: 'Cardio + flessori anca',
     formTip: 'Corri sul posto portando le ginocchia all\'altezza dell\'anca. Cadenza alta.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/08/High-Knee-Run.gif',
   },
 };
 
@@ -265,6 +286,7 @@ function buildBlock(progressionBlock, week, level) {
     icon: ex.icon,
     muscle: ex.muscle,
     formTip: ex.formTip,
+    gifUrl: ex.gifUrl,
     sets: cfg.sets,
     reps: cfg.reps,
     restSec: cfg.restSec,
