@@ -124,8 +124,8 @@ function renderHome() {
   const weights = getWeights();
   const profile = getProfile();
 
-  // Streak: giorni consecutivi (max 1 sessione/giorno) con almeno una sessione
-  const streak = computeStreak(sessions);
+  // Streak: giorni consecutivi (i riposi pianificati fanno da ponte)
+  const streak = computeStreak(sessions, getSettings().restDays || [0]);
   const totalSessions = sessions.length;
   const totalSeconds = sessions.reduce((s, x) => s + (x.durationSec || 0), 0);
   const totalKcal = sessions.reduce((s, x) => s + (x.kcal || 0), 0);
@@ -404,22 +404,27 @@ function fmtMinutes(seconds) {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-function computeStreak(sessions) {
+// Streak = giorni di allenamento consecutivi. I giorni di RIPOSO pianificato
+// (restDays) fanno da "ponte": non incrementano ma non rompono la catena, così
+// riposare quando previsto non penalizza la costanza.
+function computeStreak(sessions, restDays = [0]) {
   if (!sessions.length) return 0;
-  const dates = [...new Set(sessions.map(s => new Date(s.completedAt).toDateString()))];
-  dates.sort((a, b) => new Date(b) - new Date(a));
+  const trained = new Set(sessions.map(s => new Date(s.completedAt).toDateString()));
+  const isTrained = d => trained.has(d.toDateString());
+  const isRest = d => restDays.includes(d.getDay());
+
+  const day = new Date();
+  day.setHours(0, 0, 0, 0);
+  // Se oggi non è ancora allenato e non è un giorno di riposo, parti da ieri
+  // (non rompere la catena prima di poterti allenare nel corso della giornata)
+  if (!isTrained(day) && !isRest(day)) day.setDate(day.getDate() - 1);
+
   let streak = 0;
-  let cur = new Date();
-  cur.setHours(0, 0, 0, 0);
-  for (const d of dates) {
-    const sd = new Date(d);
-    sd.setHours(0, 0, 0, 0);
-    const diff = Math.floor((cur - sd) / 86400000);
-    if (diff === streak) { streak++; }
-    else if (diff === streak + 1 && streak === 0) {
-      // Permettiamo che la streak inizi ieri (oggi non ancora allenato)
-      streak++; cur = sd;
-    } else break;
+  for (let i = 0; i < 400; i++) {
+    if (isTrained(day)) streak++;
+    else if (!isRest(day)) break; // giorno feriale saltato → catena interrotta
+    // se è riposo pianificato: ponte, continua senza incrementare
+    day.setDate(day.getDate() - 1);
   }
   return streak;
 }
