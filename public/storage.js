@@ -66,6 +66,8 @@ const defaultSettings = {
   cloudUrl: '',            // URL Cloudflare Worker (opzionale)
   cloudToken: '',          // Token Bearer (opzionale)
   voice: '',               // Nome voce sintesi (default it-IT)
+  restDays: [0],           // Giorni di riposo (0=Dom,1=Lun,...6=Sab). Default: domenica
+  guidedPlan: true,        // Mostra la card "Oggi" che alterna corsa/forza/riposo
 };
 
 // --- Read/Write helpers ----------------------------------------------------

@@ -145,6 +145,12 @@ function renderHome() {
     ),
   ));
 
+  // Card "Oggi" — piano del giorno (alterna corsa/forza, rispetta i giorni di riposo)
+  const settings = getSettings();
+  if (settings.guidedPlan !== false) {
+    container.appendChild(buildTodayCard(progress, profile, session));
+  }
+
   // Banner Test Iniziale (se non ancora fatto)
   const assessment = getAssessment();
   if (!assessment.done) {
@@ -293,6 +299,83 @@ function renderHome() {
       }, `${['A', 'B', 'C', 'D', 'E'][i]} · ${Math.round(s.totalSeconds / 60)}'`)),
     ),
   ));
+}
+
+// --- Piano del giorno -------------------------------------------------------
+const DOW_FULL = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+const DOW_SHORT = { 1: 'Lun', 2: 'Mar', 3: 'Mer', 4: 'Gio', 5: 'Ven', 6: 'Sab', 0: 'Dom' };
+const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0]; // settimana all'italiana: Lun → Dom
+
+// Decide cosa "tocca" oggi: riposo, oppure corsa/forza alternati tra i giorni attivi.
+function getTodayPlan(settings, strengthEnabled) {
+  const restDays = settings.restDays || [0];
+  const dow = new Date().getDay();
+  const label = DOW_FULL[dow];
+  if (restDays.includes(dow)) return { type: 'rest', dow, label };
+  if (!strengthEnabled) return { type: 'run', dow, label };
+  const activeDays = DOW_ORDER.filter(d => !restDays.includes(d));
+  const idx = activeDays.indexOf(dow);
+  // 1° giorno attivo della settimana = corsa, poi alterna corsa/forza
+  return { type: idx % 2 === 0 ? 'run' : 'strength', dow, label };
+}
+
+function buildTodayCard(progress, profile, runSession) {
+  const settings = getSettings();
+  const strengthEnabled = profile.strengthEnabled !== false;
+  const plan = getTodayPlan(settings, strengthEnabled);
+
+  if (plan.type === 'rest') {
+    return el('div', { class: 'card today-card today-rest' },
+      el('div', { class: 'today-head' },
+        el('span', { class: 'today-icon' }, '🛌'),
+        el('div', {},
+          el('div', { class: 'today-label' }, `Oggi · ${plan.label}`),
+          el('div', { class: 'today-title' }, 'Riposo'),
+        ),
+      ),
+      el('div', { class: 'today-desc' },
+        'È nel recupero che arrivano i risultati. Recupero attivo permesso: una camminata leggera va benissimo, ma niente corsa né forza.'),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => setView('profile') }, 'Cambia giorni di riposo'),
+    );
+  }
+
+  if (plan.type === 'strength') {
+    const sLevel = profile.strengthLevel || 'returning';
+    const sWeek = progress.strengthWeek || 1;
+    const sIdx = progress.strengthSessionIndex || 0;
+    const sSession = getStrengthWeekSessions(sWeek, sLevel)[sIdx];
+    return el('div', { class: 'card today-card today-strength' },
+      el('div', { class: 'today-head' },
+        el('span', { class: 'today-icon' }, '💪'),
+        el('div', {},
+          el('div', { class: 'today-label' }, `Oggi · ${plan.label} — tocca FORZA`),
+          el('div', { class: 'today-title' }, sSession.title),
+        ),
+      ),
+      el('div', { class: 'today-desc' }, `~${sSession.estimatedMinutes} min · ${sSession.focus} · ${['S1', 'S2', 'S3'][sIdx]}`),
+      el('div', { class: 'card-actions' },
+        el('button', { class: 'btn btn-strength', onclick: () => startStrengthSession(sSession) }, 'Inizia forza'),
+        el('button', { class: 'btn btn-ghost', onclick: () => showStrengthPreview(sSession) }, 'Anteprima'),
+      ),
+    );
+  }
+
+  // corsa
+  const letter = ['A', 'B', 'C', 'D', 'E'][progress.currentSessionIndex] || '?';
+  return el('div', { class: 'card today-card today-run' },
+    el('div', { class: 'today-head' },
+      el('span', { class: 'today-icon' }, '🏃'),
+      el('div', {},
+        el('div', { class: 'today-label' }, `Oggi · ${plan.label} — tocca CORSA`),
+        el('div', { class: 'today-title' }, runSession.title),
+      ),
+    ),
+    el('div', { class: 'today-desc' }, `${Math.round(runSession.totalSeconds / 60)} min · ${runSession.focus} · ${letter}`),
+    el('div', { class: 'card-actions' },
+      el('button', { class: 'btn btn-primary', onclick: () => startSession(runSession) }, 'Inizia sessione'),
+      el('button', { class: 'btn btn-ghost', onclick: () => showSessionPreview(runSession) }, 'Anteprima'),
+    ),
+  );
 }
 
 function volumeHelpText(volume, week) {
@@ -2137,6 +2220,15 @@ function renderProfile() {
     } }, '↺ Ricomincia programma forza'),
   ));
 
+  // Pianificazione settimanale (giorni di riposo + piano "Oggi")
+  container.appendChild(el('div', { class: 'card' },
+    el('div', { class: 'card-label' }, '📅 Pianificazione settimanale'),
+    toggleField('Mostra il piano "Oggi" nella Home', settings.guidedPlan !== false, v => { updateSettings({ guidedPlan: v }); renderProfile(); }),
+    el('div', { class: 'help-text' }, 'Tocca i giorni in cui vuoi RIPOSARE (evidenziati in rosso). Negli altri giorni l\'app alterna automaticamente corsa e forza, partendo dalla corsa.'),
+    restDaysSelector(settings),
+    el('div', { class: 'help-text' }, planSummaryText(settings, profile)),
+  ));
+
   // Zone HR
   container.appendChild(el('div', { class: 'card zones-card' },
     el('div', { class: 'card-label' }, `Zone cardiache — FC max ${zones.hrMax} bpm`),
@@ -2201,6 +2293,41 @@ function renderProfile() {
       }
     } }, '↺ Ricomincia programma'),
   ));
+}
+
+// Selettore giorni di riposo: chip rossa = riposo, chip neutra = allenamento
+function restDaysSelector(settings) {
+  const restDays = settings.restDays || [0];
+  const row = el('div', { class: 'chip-row rest-days-row' });
+  DOW_ORDER.forEach(d => {
+    const isRest = restDays.includes(d);
+    row.appendChild(el('button', {
+      class: `chip ${isRest ? 'chip-rest' : ''}`,
+      onclick: () => {
+        const s = getSettings();
+        let rd = (s.restDays || [0]).slice();
+        if (rd.includes(d)) rd = rd.filter(x => x !== d);
+        else rd.push(d);
+        if (rd.length >= 7) { toast('Tieni almeno un giorno di allenamento'); return; }
+        updateSettings({ restDays: rd });
+        renderProfile();
+      },
+    }, DOW_SHORT[d]));
+  });
+  return row;
+}
+
+// Riassunto testuale del piano settimanale risultante
+function planSummaryText(settings, profile) {
+  const restDays = settings.restDays || [0];
+  const strengthEnabled = profile.strengthEnabled !== false;
+  const active = DOW_ORDER.filter(d => !restDays.includes(d));
+  const restLabels = DOW_ORDER.filter(d => restDays.includes(d)).map(d => DOW_SHORT[d]);
+  if (!strengthEnabled) {
+    return `Piano: ${active.length} giorni di corsa. Riposo: ${restLabels.join(', ') || 'nessuno'}.`;
+  }
+  const parts = active.map((d, i) => `${DOW_SHORT[d]} ${i % 2 === 0 ? '🏃' : '💪'}`);
+  return `Piano: ${parts.join(' · ')} · Riposo: ${restLabels.join(', ') || 'nessuno'}.`;
 }
 
 function field(label, value, onchange, type = 'text') {
