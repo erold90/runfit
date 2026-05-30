@@ -565,14 +565,14 @@ function showFeedbackForm(session, interrupted = false) {
     fieldWrap('Calorie attive', numInput('activeKcal', '180', { type: 'number', inputmode: 'numeric', step: '1' }), 'kcal'),
     fieldWrap('Distanza', numInput('km', '3.2', { step: '0.01' }), 'km'),
     fieldWrap('Passo medio', paceInput(state), 'min/km'),
-    fieldWrap('Dislivello', numInput('elevationGain', '12', { type: 'number', inputmode: 'numeric', step: '1' }), 'm'),
   );
 
-  // Sezione avanzati (collapsible)
+  // Sezione opzionali (collapsible) — NON servono all'algoritmo
   const advancedContent = el('div', { class: 'feedback-grid advanced-grid' },
+    fieldWrap('Dislivello', numInput('elevationGain', '12', { type: 'number', inputmode: 'numeric', step: '1' }), 'm'),
+    fieldWrap('Cadenza media', numInput('cadence', '165', { type: 'number', inputmode: 'numeric', step: '1' }), 'spm'),
     fieldWrap('Tempo Z2', numInput('timeZ2', '8', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
     fieldWrap('Tempo Z3', numInput('timeZ3', '5', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
-    fieldWrap('Cadenza media', numInput('cadence', '165', { type: 'number', inputmode: 'numeric', step: '1' }), 'spm'),
     fieldWrap('Lunghezza passo', numInput('strideM', '1.05', { step: '0.01' }), 'm'),
     fieldWrap('Oscillaz. vert.', numInput('verticalOsc', '8.5', { step: '0.1' }), 'cm'),
     fieldWrap('Tempo a terra', numInput('groundContact', '280', { type: 'number', inputmode: 'numeric', step: '1' }), 'ms'),
@@ -581,13 +581,13 @@ function showFeedbackForm(session, interrupted = false) {
   const advancedToggle = el('button', {
     class: 'advanced-toggle',
     type: 'button',
-  }, '▼ Dettagli avanzati Apple Watch (opzionale)');
+  }, '▼ Dati extra (opzionali — non servono all\'algoritmo)');
   let advancedOpen = false;
   advancedContent.style.display = 'none';
   advancedToggle.addEventListener('click', () => {
     advancedOpen = !advancedOpen;
     advancedContent.style.display = advancedOpen ? 'grid' : 'none';
-    advancedToggle.textContent = (advancedOpen ? '▲ Nascondi' : '▼ Dettagli avanzati Apple Watch (opzionale)');
+    advancedToggle.textContent = (advancedOpen ? '▲ Nascondi extra' : '▼ Dati extra (opzionali — non servono all\'algoritmo)');
   });
 
   const notesInput = el('textarea', {
@@ -1669,24 +1669,42 @@ function showSessionEditor(s) {
   notesInput.value = st.notes;
   notesInput.addEventListener('input', e => { st.notes = e.target.value; });
 
-  const runFields = isStrength ? null : el('div', { class: 'feedback-grid' },
-    fieldWrap('Durata', numInput('durationMin', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
-    fieldWrap('FC media', numInput('avgHr', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
-    fieldWrap('FC max', numInput('maxHr', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
-    fieldWrap('Calorie attive', numInput('activeKcal', { type: 'number', inputmode: 'numeric', step: '1' }), 'kcal'),
-    fieldWrap('Distanza', numInput('km', { step: '0.01' }), 'km'),
-    fieldWrap('Passo medio', paceField(), 'min/km'),
+  // ESSENZIALI: gli unici che servono (FC media → algoritmo; gli altri per le statistiche)
+  const essentialFields = isStrength
+    ? el('div', { class: 'feedback-grid' },
+        fieldWrap('Durata', numInput('durationMin', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+        fieldWrap('FC media', numInput('avgHr', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
+        fieldWrap('Calorie attive', numInput('activeKcal', { type: 'number', inputmode: 'numeric', step: '1' }), 'kcal'),
+      )
+    : el('div', { class: 'feedback-grid' },
+        fieldWrap('Durata', numInput('durationMin', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+        fieldWrap('FC media', numInput('avgHr', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
+        fieldWrap('FC max', numInput('maxHr', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
+        fieldWrap('Calorie attive', numInput('activeKcal', { type: 'number', inputmode: 'numeric', step: '1' }), 'kcal'),
+        fieldWrap('Distanza', numInput('km', { step: '0.01' }), 'km'),
+        fieldWrap('Passo medio', paceField(), 'min/km'),
+      );
+
+  // OPZIONALI: non servono all'algoritmo, nascosti dietro toggle
+  const optionalGrid = isStrength ? null : el('div', { class: 'feedback-grid advanced-grid' },
     fieldWrap('Dislivello', numInput('elevationGain', { type: 'number', inputmode: 'numeric', step: '1' }), 'm'),
     fieldWrap('Cadenza', numInput('cadence', { type: 'number', inputmode: 'numeric', step: '1' }), 'spm'),
     fieldWrap('Tempo Z2', numInput('timeZ2', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
     fieldWrap('Tempo Z3', numInput('timeZ3', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
   );
-
-  const strengthDurField = !isStrength ? null : el('div', { class: 'feedback-grid' },
-    fieldWrap('Durata', numInput('durationMin', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
-    fieldWrap('FC media', numInput('avgHr', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
-    fieldWrap('Calorie attive', numInput('activeKcal', { type: 'number', inputmode: 'numeric', step: '1' }), 'kcal'),
-  );
+  let optionalSection = null;
+  if (optionalGrid) {
+    const optToggle = el('button', { class: 'advanced-toggle', type: 'button' },
+      '▼ Dati extra (opzionali — non servono all\'algoritmo)');
+    let open = false;
+    optionalGrid.style.display = 'none';
+    optToggle.addEventListener('click', () => {
+      open = !open;
+      optionalGrid.style.display = open ? 'grid' : 'none';
+      optToggle.textContent = open ? '▲ Nascondi extra' : '▼ Dati extra (opzionali — non servono all\'algoritmo)';
+    });
+    optionalSection = el('div', { class: 'feedback-section' }, optToggle, optionalGrid);
+  }
 
   container.appendChild(el('div', { class: 'feedback-screen editor-screen' },
     el('div', { class: 'editor-topbar' },
@@ -1699,14 +1717,16 @@ function showSessionEditor(s) {
     ),
     el('div', { class: 'feedback-section' },
       el('label', { class: 'feedback-label' }, 'Fatica (RPE 1-10)'),
+      el('div', { class: 'feedback-hint' }, 'È il dato che muove l\'algoritmo: metti la TUA percezione onesta.'),
       el('div', { class: 'rpe-row' }, rpeDisplay, rpeLabel),
       rpeSlider,
     ),
     el('div', { class: 'feedback-section' },
-      el('label', { class: 'feedback-label' }, '📊 Dati'),
-      el('div', { class: 'feedback-hint' }, 'Modifica i valori: passo, calorie e zone vengono ricalcolati al salvataggio.'),
-      runFields || strengthDurField,
+      el('label', { class: 'feedback-label' }, '📊 Dati essenziali'),
+      el('div', { class: 'feedback-hint' }, 'Passo, calorie e zone vengono ricalcolati al salvataggio.'),
+      essentialFields,
     ),
+    optionalSection,
     el('div', { class: 'feedback-section' },
       el('label', { class: 'feedback-label' }, 'Note'),
       notesInput,
