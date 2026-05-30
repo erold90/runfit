@@ -666,29 +666,31 @@ function paceInput(state) {
   const i = el('input', {
     type: 'text',
     inputmode: 'decimal',
-    placeholder: '6:30',
+    placeholder: '9:19 o 9,19',
     class: 'feedback-input',
-    pattern: '[0-9:.]*',
+    pattern: '[0-9:.,]*',
   });
   i.addEventListener('input', e => { state.paceMinPerKm = e.target.value; });
   return i;
 }
 
+// Interpreta il passo come minuti:secondi (formato Apple Watch 9'19").
+// Sul tastierino numerico iOS è disponibile solo la virgola: la trattiamo
+// come separatore mm:ss, esattamente come i due punti. Quindi "9,19" = 9:19 = 559s.
 function parsePaceToSec(str) {
   if (!str) return null;
-  str = String(str).trim();
-  // formato "5:30" o "5.30"
-  let parts;
-  if (str.includes(':')) parts = str.split(':');
-  else if (str.includes('.')) {
-    const n = parseFloat(str);
-    return Math.round(n * 60); // 5.5 -> 330 sec
-  } else if (/^\d+$/.test(str)) {
-    return parseInt(str) * 60; // 5 -> 300 sec
-  } else return null;
-  const mins = parseInt(parts[0]) || 0;
-  const secs = parseInt(parts[1]) || 0;
-  return mins * 60 + secs;
+  str = String(str).trim().replace(',', ':').replace('.', ':');
+  if (str.includes(':')) {
+    const parts = str.split(':');
+    const mins = parseInt(parts[0], 10) || 0;
+    let secStr = (parts[1] || '').trim();
+    // "9:5" -> 9:05 (una cifra = decine di secondi, come mostra il watch)
+    if (secStr.length === 1) secStr = secStr + '0';
+    const secs = parseInt(secStr, 10) || 0;
+    return mins * 60 + secs;
+  }
+  if (/^\d+$/.test(str)) return parseInt(str, 10) * 60; // "9" -> 9:00
+  return null;
 }
 
 function parseIntOrNull(v) {
