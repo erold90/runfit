@@ -111,6 +111,17 @@ export function deleteSession(id) {
   const list = getSessions().filter(s => s.id !== id);
   localStorage.setItem(LS_SESSIONS, JSON.stringify(list));
 }
+export function updateSession(record) {
+  const list = getSessions();
+  const idx = list.findIndex(s => s.id === record.id);
+  if (idx === -1) return false;
+  list[idx] = record;
+  localStorage.setItem(LS_SESSIONS, JSON.stringify(list));
+  return true;
+}
+export function getSession(id) {
+  return getSessions().find(s => s.id === id) || null;
+}
 
 // --- Weight log ------------------------------------------------------------
 export function getWeights() {

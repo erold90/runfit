@@ -9,7 +9,7 @@ import {
 import {
   getProfile, saveProfile,
   getProgress, saveProgress,
-  getSessions, saveSession, deleteSession,
+  getSessions, saveSession, deleteSession, updateSession,
   getWeights, addWeight,
   getSettings, saveSettings,
   getAssessment, saveAssessment,
@@ -1576,36 +1576,194 @@ function historyCard(s) {
   const isStrength = s.type === 'strength';
   const pace = s.paceSecPerKm ? fmtPace(s.paceSecPerKm) : null;
   return el('div', { class: `card history-card ${isStrength ? 'history-strength' : 'history-run'}` },
-    el('div', { class: 'history-badge' }, isStrength ? '💪 Forza' : '🏃 Corsa'),
-    el('div', { class: 'history-card-head' },
+    el('div', { class: 'history-card-top' },
+      el('span', { class: 'history-badge' }, isStrength ? '💪 Forza' : '🏃 Corsa'),
+      el('span', { class: 'history-card-date' }, fmtDate(s.completedAt)),
+    ),
+    el('div', { class: 'history-card-body', onclick: () => showSessionEditor(s) },
       el('div', { class: 'history-card-title' }, s.title),
-      el('div', { class: 'history-card-date' }, fmtDate(s.completedAt)),
+      el('div', { class: 'history-card-stats' },
+        el('span', {}, `${s.durationMin}'`),
+        el('span', { class: 'dot' }, '·'),
+        el('span', {}, `RPE ${s.rpe}`),
+        isStrength && s.totalSets ? el('span', { class: 'dot' }, '·') : null,
+        isStrength && s.totalSets ? el('span', {}, `${s.completedSets || 0}/${s.totalSets} serie`) : null,
+        s.avgHr ? el('span', { class: 'dot' }, '·') : null,
+        s.avgHr ? el('span', {}, `${s.avgHr}${s.maxHr ? '/' + s.maxHr : ''} bpm`) : null,
+        s.kcal ? el('span', { class: 'dot' }, '·') : null,
+        s.kcal ? el('span', { title: s.kcalSource === 'apple-watch' ? 'Da Apple Watch' : 'Stima' }, `${s.kcal} kcal${s.kcalSource === 'apple-watch' ? ' ⌚' : ''}`) : null,
+        s.km ? el('span', { class: 'dot' }, '·') : null,
+        s.km ? el('span', {}, `${s.km} km`) : null,
+        pace ? el('span', { class: 'dot' }, '·') : null,
+        pace ? el('span', {}, `${pace}/km`) : null,
+        s.cadence ? el('span', { class: 'dot' }, '·') : null,
+        s.cadence ? el('span', {}, `${s.cadence} spm`) : null,
+        s.elevationGain ? el('span', { class: 'dot' }, '·') : null,
+        s.elevationGain ? el('span', {}, `↗ ${s.elevationGain}m`) : null,
+      ),
+      s.notes ? el('div', { class: 'history-card-notes' }, s.notes) : null,
+      el('div', { class: 'history-card-hint' }, 'Tocca per dettagli e modifica'),
     ),
-    el('div', { class: 'history-card-stats' },
-      el('span', {}, `${s.durationMin}'`),
-      el('span', { class: 'dot' }, '·'),
-      el('span', {}, `RPE ${s.rpe}`),
-      isStrength && s.totalSets ? el('span', { class: 'dot' }, '·') : null,
-      isStrength && s.totalSets ? el('span', {}, `${s.completedSets || 0}/${s.totalSets} serie`) : null,
-      s.avgHr ? el('span', { class: 'dot' }, '·') : null,
-      s.avgHr ? el('span', {}, `${s.avgHr}${s.maxHr ? '/' + s.maxHr : ''} bpm`) : null,
-      s.kcal ? el('span', { class: 'dot' }, '·') : null,
-      s.kcal ? el('span', { title: s.kcalSource === 'apple-watch' ? 'Da Apple Watch' : 'Stima' }, `${s.kcal} kcal${s.kcalSource === 'apple-watch' ? ' ⌚' : ''}`) : null,
-      s.km ? el('span', { class: 'dot' }, '·') : null,
-      s.km ? el('span', {}, `${s.km} km`) : null,
-      pace ? el('span', { class: 'dot' }, '·') : null,
-      pace ? el('span', {}, `${pace}/km`) : null,
-      s.cadence ? el('span', { class: 'dot' }, '·') : null,
-      s.cadence ? el('span', {}, `${s.cadence} spm`) : null,
-      s.elevationGain ? el('span', { class: 'dot' }, '·') : null,
-      s.elevationGain ? el('span', {}, `↗ ${s.elevationGain}m`) : null,
-    ),
-    s.notes ? el('div', { class: 'history-card-notes' }, s.notes) : null,
     el('button', {
       class: 'icon-btn history-delete',
-      onclick: () => { if (confirm('Eliminare questa sessione?')) { deleteSession(s.id); renderHistory(); } },
+      onclick: (e) => { e.stopPropagation(); if (confirm('Eliminare questa sessione?')) { deleteSession(s.id); renderHistory(); } },
     }, '🗑'),
   );
+}
+
+// --- Dettaglio + modifica sessione (con ricalcolo derivati) ----------------
+function showSessionEditor(s) {
+  const isStrength = s.type === 'strength';
+  const container = $('#view-history');
+  container.innerHTML = '';
+
+  // Stato precompilato dai valori salvati
+  const st = {
+    rpe: s.rpe || 6,
+    durationMin: s.durationMin != null ? String(s.durationMin) : '',
+    avgHr: s.avgHr != null ? String(s.avgHr) : '',
+    maxHr: s.maxHr != null ? String(s.maxHr) : '',
+    activeKcal: s.kcalSource === 'apple-watch' && s.kcal != null ? String(s.kcal) : '',
+    km: s.km != null ? String(s.km) : '',
+    paceMinPerKm: s.paceSecPerKm ? fmtPace(s.paceSecPerKm) : '',
+    elevationGain: s.elevationGain != null ? String(s.elevationGain) : '',
+    cadence: s.cadence != null ? String(s.cadence) : '',
+    strideM: s.strideM != null ? String(s.strideM) : '',
+    timeZ2: s.timeInZoneSec?.z2 != null ? String(Math.round(s.timeInZoneSec.z2 / 60)) : '',
+    timeZ3: s.timeInZoneSec?.z3 != null ? String(Math.round(s.timeInZoneSec.z3 / 60)) : '',
+    notes: s.notes || '',
+  };
+
+  // Input numerico con valore iniziale
+  const numInput = (key, opts = {}) => {
+    const i = el('input', {
+      type: opts.type || 'number',
+      inputmode: opts.inputmode || 'decimal',
+      step: opts.step || '0.1', min: '0',
+      value: st[key], class: 'feedback-input',
+      ...(opts.max ? { max: opts.max } : {}),
+    });
+    i.addEventListener('input', e => { st[key] = e.target.value; });
+    return i;
+  };
+  // Input passo con valore iniziale (riusa parsePaceToSec, accetta virgola)
+  const paceField = () => {
+    const i = el('input', {
+      type: 'text', inputmode: 'decimal', placeholder: '9:19 o 9,19',
+      value: st.paceMinPerKm, class: 'feedback-input', pattern: '[0-9:.,]*',
+    });
+    i.addEventListener('input', e => { st.paceMinPerKm = e.target.value; });
+    return i;
+  };
+
+  const rpeDisplay = el('div', { class: 'rpe-display' }, String(st.rpe));
+  const rpeLabel = el('div', { class: 'rpe-label' }, rpeText(st.rpe));
+  const rpeSlider = el('input', { type: 'range', min: '1', max: '10', value: String(st.rpe), class: 'rpe-slider' });
+  rpeSlider.addEventListener('input', e => {
+    st.rpe = parseInt(e.target.value);
+    rpeDisplay.textContent = st.rpe;
+    rpeLabel.textContent = rpeText(st.rpe);
+  });
+
+  const notesInput = el('textarea', { class: 'feedback-input', rows: '3', placeholder: 'Note libere…' }, );
+  notesInput.value = st.notes;
+  notesInput.addEventListener('input', e => { st.notes = e.target.value; });
+
+  const runFields = isStrength ? null : el('div', { class: 'feedback-grid' },
+    fieldWrap('Durata', numInput('durationMin', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+    fieldWrap('FC media', numInput('avgHr', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
+    fieldWrap('FC max', numInput('maxHr', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
+    fieldWrap('Calorie attive', numInput('activeKcal', { type: 'number', inputmode: 'numeric', step: '1' }), 'kcal'),
+    fieldWrap('Distanza', numInput('km', { step: '0.01' }), 'km'),
+    fieldWrap('Passo medio', paceField(), 'min/km'),
+    fieldWrap('Dislivello', numInput('elevationGain', { type: 'number', inputmode: 'numeric', step: '1' }), 'm'),
+    fieldWrap('Cadenza', numInput('cadence', { type: 'number', inputmode: 'numeric', step: '1' }), 'spm'),
+    fieldWrap('Tempo Z2', numInput('timeZ2', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+    fieldWrap('Tempo Z3', numInput('timeZ3', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+  );
+
+  const strengthDurField = !isStrength ? null : el('div', { class: 'feedback-grid' },
+    fieldWrap('Durata', numInput('durationMin', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+    fieldWrap('FC media', numInput('avgHr', { type: 'number', inputmode: 'numeric', step: '1', max: '220' }), 'bpm'),
+    fieldWrap('Calorie attive', numInput('activeKcal', { type: 'number', inputmode: 'numeric', step: '1' }), 'kcal'),
+  );
+
+  container.appendChild(el('div', { class: 'feedback-screen editor-screen' },
+    el('div', { class: 'editor-topbar' },
+      el('button', { class: 'btn btn-ghost btn-back', onclick: () => { setView('history'); } }, '‹ Storico'),
+      el('div', { class: 'editor-title' }, 'Modifica sessione'),
+    ),
+    el('div', { class: 'editor-meta' },
+      el('div', { class: 'editor-meta-title' }, s.title),
+      el('div', { class: 'editor-meta-sub' }, `${isStrength ? '💪 Forza' : '🏃 Corsa'} · ${fmtDate(s.completedAt)} · S${s.week}`),
+    ),
+    el('div', { class: 'feedback-section' },
+      el('label', { class: 'feedback-label' }, 'Fatica (RPE 1-10)'),
+      el('div', { class: 'rpe-row' }, rpeDisplay, rpeLabel),
+      rpeSlider,
+    ),
+    el('div', { class: 'feedback-section' },
+      el('label', { class: 'feedback-label' }, '📊 Dati'),
+      el('div', { class: 'feedback-hint' }, 'Modifica i valori: passo, calorie e zone vengono ricalcolati al salvataggio.'),
+      runFields || strengthDurField,
+    ),
+    el('div', { class: 'feedback-section' },
+      el('label', { class: 'feedback-label' }, 'Note'),
+      notesInput,
+    ),
+    el('div', { class: 'editor-actions' },
+      el('button', { class: 'btn btn-ghost', onclick: () => setView('history') }, 'Annulla'),
+      el('button', { class: 'btn btn-primary', onclick: () => {
+        const updated = recomputeSessionRecord(s, st);
+        updateSession(updated);
+        setView('history');
+      } }, 'Salva modifiche'),
+    ),
+  ));
+}
+
+// Ricalcola i campi derivati (passo, calorie, durata, zone) dai valori grezzi
+function recomputeSessionRecord(orig, st) {
+  const profile = getProfile();
+  const durationMin = parseFloatOrNull(st.durationMin) != null ? parseFloatOrNull(st.durationMin) : orig.durationMin;
+  const durationSec = Math.round((durationMin || 0) * 60) || orig.durationSec;
+  const avgHr = parseIntOrNull(st.avgHr);
+  const maxHr = parseIntOrNull(st.maxHr);
+  const activeKcal = parseIntOrNull(st.activeKcal);
+
+  // Ricalcolo calorie: Apple Watch > Keytel (HR) > mantieni stima precedente
+  let kcal, kcalSource;
+  if (activeKcal) {
+    kcal = activeKcal; kcalSource = 'apple-watch';
+  } else if (avgHr) {
+    kcal = kcalKeytel({
+      avgHr, weightKg: profile.weightCurrentKg, age: getAge(),
+      durationMin: durationMin || orig.durationMin, isMale: profile.isMale,
+    });
+    kcalSource = 'keytel';
+  } else {
+    kcal = orig.kcal; kcalSource = orig.kcalSource;
+  }
+
+  return {
+    ...orig,
+    rpe: st.rpe,
+    notes: st.notes,
+    durationSec,
+    durationMin: Math.round((durationMin || 0) * 10) / 10,
+    avgHr, maxHr,
+    km: parseFloatOrNull(st.km),
+    paceSecPerKm: parsePaceToSec(st.paceMinPerKm),
+    elevationGain: parseIntOrNull(st.elevationGain),
+    cadence: parseIntOrNull(st.cadence),
+    strideM: parseFloatOrNull(st.strideM),
+    timeInZoneSec: {
+      z2: minToSec(parseFloatOrNull(st.timeZ2)),
+      z3: minToSec(parseFloatOrNull(st.timeZ3)),
+    },
+    kcal, kcalSource,
+    editedAt: new Date().toISOString(),
+  };
 }
 
 function fmtPace(secPerKm) {
