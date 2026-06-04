@@ -949,18 +949,22 @@ body.session-active .view { padding-top: calc(8px + var(--safe-top)); }
 
 /* --- FAB coach (apri chat) --- */
 .coach-fab {
-  position: fixed; right: 16px; bottom: 84px;
-  width: 54px; height: 54px; border-radius: 50%;
-  border: none; font-size: 1.5rem; line-height: 1;
+  position: fixed; right: 16px;
+  bottom: calc(var(--safe-bottom, 0px) + 84px);
+  width: 56px; height: 56px; border-radius: 50%;
+  border: none; font-size: 1.55rem; line-height: 1;
   background: linear-gradient(135deg, #38bdf8, #0ea5e9);
-  color: #fff; box-shadow: 0 6px 18px rgba(14,165,233,0.45);
-  z-index: 40; cursor: pointer;
+  color: #fff; box-shadow: 0 6px 20px rgba(14,165,233,0.5);
+  z-index: 110; cursor: pointer;
 }
 .coach-fab[hidden] { display: none; }
 
+/* In chat la tabbar si nasconde: la chat usa tutto lo schermo */
+body.coach-active .tabbar { display: none; }
+
 /* --- Chat col coach (vista a tutto schermo) --- */
 .chat-view {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: 150;
   display: flex; flex-direction: column;
   background: var(--bg, #0a0e14);
 }

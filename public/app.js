@@ -102,6 +102,8 @@ function setView(name) {
     const show = (getSettings().coachEnabled === true) && ['home', 'history', 'stats'].includes(name);
     fab.hidden = !show;
   }
+  // In chat nascondi la tabbar (la vista usa tutto lo schermo)
+  document.body.classList.toggle('coach-active', name === 'coach');
   const renderer = {
     home: renderHome,
     workout: renderWorkout,
