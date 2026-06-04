@@ -57,6 +57,7 @@ const defaultProgress = {
   strengthWeek: 1,
   strengthSessionIndex: 0, // 0=S1, 1=S2, 2=S3
   strengthRepScale: 1,     // moltiplicatore di intensità (reps) adattivo, ricalcolato dal log
+  coachRepScaleBias: 0,    // bias persistente proposto dall'AI coach, sommato dopo il replay
 };
 
 const defaultSettings = {
@@ -69,6 +70,10 @@ const defaultSettings = {
   voice: '',               // Nome voce sintesi (default it-IT)
   restDays: [0],           // Giorni di riposo (0=Dom,1=Lun,...6=Sab). Default: domenica
   guidedPlan: true,        // Mostra la card "Oggi" che alterna corsa/forza/riposo
+  // AI Coach (opzionale) — proxy Worker, vedi coach-worker/
+  coachEnabled: false,     // off di default
+  coachUrl: '',            // URL del Worker coach (es. https://runfit-coach.<acct>.workers.dev)
+  coachToken: '',          // token condiviso X-RunFit-Token
 };
 
 // --- Read/Write helpers ----------------------------------------------------
@@ -143,6 +148,51 @@ export function addWeight(kg, dateISO = new Date().toISOString()) {
   const p = getProfile();
   p.weightCurrentKg = kg;
   saveProfile(p);
+}
+
+// --- Contesto per l'AI Coach ----------------------------------------------
+// Impacchetta profilo + assessment + progress + ultima sessione + storico
+// recente da inviare al Worker coach. Solo dati di allenamento, nessun dato
+// non pertinente.
+export function coachContext() {
+  const profile = getProfile();
+  const res = getAssessment().results || {};
+  const progress = getProgress();
+  const sessions = getSessions();
+  const weights = getWeights();
+  const age = profile.birthYear ? new Date().getFullYear() - profile.birthYear : null;
+
+  // Ultime ~8 sessioni con i soli campi utili (l'ultima = quella appena fatta)
+  const recent = sessions.slice(-8).map(s => ({
+    type: s.type, title: s.title, week: s.week, completedAt: s.completedAt,
+    rpe: s.rpe, durationMin: s.durationMin, avgHr: s.avgHr, maxHr: s.maxHr, kcal: s.kcal,
+    km: s.km, paceSecPerKm: s.paceSecPerKm,
+    completedSets: s.completedSets, totalSets: s.totalSets,
+    completedSetsLog: s.type === 'strength' ? s.completedSetsLog : undefined,
+    notes: s.notes || undefined,
+  }));
+  const lastSession = recent.length ? recent[recent.length - 1] : null;
+  const history = recent.slice(0, -1);
+
+  return {
+    profile: {
+      name: profile.name, age, sex: profile.isMale ? 'M' : 'F',
+      weightKg: profile.weightCurrentKg, targetKg: profile.weightTargetKg,
+      strengthLevel: profile.strengthLevel, goal: 'dimagrimento',
+    },
+    assessment: {
+      vo2max: res.vo2max, hrr: res.hrrDrop, strengthLevel: res.strengthLevel,
+      hrMax: res.hrMax, z2Range: res.z2Range,
+    },
+    progress: {
+      runWeek: progress.currentWeek, weeklyVolume: progress.weeklyVolume,
+      strengthWeek: progress.strengthWeek, strengthSessionIndex: progress.strengthSessionIndex,
+      strengthRepScale: progress.strengthRepScale, coachRepScaleBias: progress.coachRepScaleBias,
+    },
+    lastSession,
+    history,
+    weights: weights.slice(-6),
+  };
 }
 
 // --- Export/Import locale --------------------------------------------------

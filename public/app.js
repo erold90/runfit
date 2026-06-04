@@ -15,6 +15,7 @@ import {
   getAssessment, saveAssessment,
   exportAllJson, importAllJson,
   cloudPush, cloudPull,
+  coachContext,
 } from './storage.js';
 import {
   calcVO2maxRockport, vo2maxCategory,
@@ -937,6 +938,7 @@ function showResultsScreen(record, volumeChangeMessage = null) {
       el('button', { class: 'btn btn-ghost', onclick: () => setView('stats') }, 'Vedi statistiche'),
     ),
   ));
+  mountCoachDebrief();
 }
 
 // ============================================================================
@@ -1603,11 +1605,134 @@ function applyStrengthProgress() {
   const progress = getProgress();
   const strengthSessions = getSessions().filter(s => s.type === 'strength');
   const state = recomputeStrengthState(strengthSessions, profile.strengthLevel || 'returning');
+  // Il bias del coach AI è persistente e si somma DOPO il replay deterministico,
+  // così non viene sovrascritto dal ricalcolo dal log.
+  const bias = progress.coachRepScaleBias || 0;
   progress.strengthWeek = state.strengthWeek;
   progress.strengthSessionIndex = state.strengthSessionIndex;
-  progress.strengthRepScale = state.strengthRepScale;
+  progress.strengthRepScale = Math.min(1.7, Math.max(0.7, state.strengthRepScale + bias));
   saveProgress(progress);
-  return state;
+  return { ...state, strengthRepScale: progress.strengthRepScale };
+}
+
+// ============================================================================
+// AI COACH — chiamata al Worker, applicazione ibrida, UI debrief
+// ============================================================================
+
+/** Chiama il Worker coach. Ritorna {coach}, {skipped} o {error}. Mai lancia. */
+async function fetchCoach() {
+  const s = getSettings();
+  if (!s.coachEnabled || !s.coachUrl) return { skipped: true };
+  try {
+    const url = s.coachUrl.replace(/\/+$/, '') + '/coach';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(s.coachToken ? { 'X-RunFit-Token': s.coachToken } : {}),
+      },
+      body: JSON.stringify({ context: coachContext() }),
+    });
+    if (!res.ok) return { error: `HTTP ${res.status}` };
+    const data = await res.json();
+    if (!data || !data.coach) return { error: 'risposta vuota' };
+    return { coach: data.coach };
+  } catch (e) {
+    return { error: (e && e.message) || 'rete' };
+  }
+}
+
+/**
+ * Applica l'aggiustamento del coach ENTRO I GUARDRAIL.
+ * - forza: repScaleDelta (±0.15) accumulato nel bias persistente → ricalcolo.
+ * - corsa / weekDelta: NON applicato in automatico (la progressione corsa ha la
+ *   regola del 10% e va trattata con prudenza) → resta solo consiglio testuale.
+ * - flag "medical": nessuna modifica.
+ */
+function applyCoachAdjustment(adj, flag) {
+  if (!adj || flag === 'medical') return null;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  if (adj.domain === 'strength') {
+    const delta = clamp(Number(adj.repScaleDelta) || 0, -0.15, 0.15);
+    if (delta !== 0) {
+      const progress = getProgress();
+      const bias = clamp((progress.coachRepScaleBias || 0) + delta, -0.4, 0.4);
+      progress.coachRepScaleBias = bias;
+      saveProgress(progress);
+      const state = applyStrengthProgress(); // ricalcola repScale includendo il bias
+      return { domain: 'strength', repScalePct: Math.round(state.strengthRepScale * 100) };
+    }
+  }
+  return null;
+}
+
+function flagBadge(flag) {
+  if (flag === 'medical') return el('span', { class: 'coach-flag coach-flag-medical' }, '⚠️ Attenzione medica');
+  if (flag === 'caution') return el('span', { class: 'coach-flag coach-flag-caution' }, '⏸ Cautela');
+  return null;
+}
+
+/** Test di connessione al Worker dal Profilo. */
+function testCoachConnection() {
+  toast('🤖 Contatto il coach…');
+  fetchCoach().then(r => {
+    if (r.skipped) toast('Coach non configurato (URL mancante?)');
+    else if (r.error) toast(`Errore: ${r.error}`);
+    else toast('✓ Coach raggiungibile!');
+  });
+}
+
+/** Inserisce la card del coach nella schermata risultati e avvia il fetch. */
+function mountCoachDebrief() {
+  const s = getSettings();
+  if (!s.coachEnabled || !s.coachUrl) return;
+  const screen = document.querySelector('#view-workout .results-screen');
+  if (!screen) return;
+  const actions = screen.querySelector('.results-actions');
+  const card = el('div', { class: 'coach-card coach-loading' },
+    el('div', { class: 'coach-head' },
+      el('span', { class: 'coach-avatar' }, '🤖'),
+      el('span', { class: 'coach-title' }, 'Il coach sta analizzando…'),
+    ),
+  );
+  if (actions) screen.insertBefore(card, actions);
+  else screen.appendChild(card);
+
+  fetchCoach().then(r => {
+    if (r.skipped) { card.remove(); return; }
+    if (r.error || !r.coach) {
+      card.className = 'coach-card coach-error';
+      card.innerHTML = '';
+      card.appendChild(el('div', { class: 'coach-head' },
+        el('span', { class: 'coach-avatar' }, '🤖'),
+        el('span', { class: 'coach-title' }, 'Coach non disponibile'),
+      ));
+      card.appendChild(el('div', { class: 'coach-sub' },
+        'Debrief AI non raggiungibile (offline o errore). L\'allenamento è salvato e la progressione aggiornata comunque.'));
+      return;
+    }
+    const c = r.coach;
+    const applied = applyCoachAdjustment(c.adjustment, c.flag);
+    card.className = 'coach-card' + (c.flag === 'medical' ? ' coach-medical' : '');
+    card.innerHTML = '';
+    card.appendChild(el('div', { class: 'coach-head' },
+      el('span', { class: 'coach-avatar' }, '🤖'),
+      el('span', { class: 'coach-title' }, 'Il tuo coach'),
+      flagBadge(c.flag),
+    ));
+    card.appendChild(el('div', { class: 'coach-debrief' }, c.debrief || ''));
+    if (Array.isArray(c.highlights) && c.highlights.length) {
+      card.appendChild(el('ul', { class: 'coach-highlights' },
+        ...c.highlights.map(h => el('li', {}, h))));
+    }
+    if (applied && applied.domain === 'strength') {
+      card.appendChild(el('div', { class: 'coach-applied' },
+        `✓ Intensità forza aggiornata: ${applied.repScalePct}% del target`));
+    } else if (c.adjustment && c.adjustment.action && c.adjustment.action !== 'keep' && c.adjustment.domain === 'run') {
+      card.appendChild(el('div', { class: 'coach-applied coach-advice' },
+        `💡 Consiglio corsa: ${c.adjustment.reason || c.adjustment.action} (applicalo tu, la progressione corsa resta prudente)`));
+    }
+  });
 }
 
 function showStrengthResultsScreen(record) {
@@ -1627,6 +1752,7 @@ function showStrengthResultsScreen(record) {
       el('button', { class: 'btn btn-ghost', onclick: () => setView('stats') }, 'Vedi statistiche'),
     ),
   ));
+  mountCoachDebrief();
 }
 
 function renderWorkout() {
@@ -2304,6 +2430,16 @@ function renderProfile() {
     el('div', { class: 'help-text' }, 'Tocca i giorni in cui vuoi RIPOSARE (evidenziati in rosso). Negli altri giorni l\'app alterna automaticamente corsa e forza, partendo dalla corsa.'),
     restDaysSelector(settings),
     el('div', { class: 'help-text' }, planSummaryText(settings, profile)),
+  ));
+
+  // Coach AI (opzionale)
+  container.appendChild(el('div', { class: 'card' },
+    el('div', { class: 'card-label' }, '🤖 Coach AI'),
+    el('div', { class: 'help-text' }, 'A fine sessione un coach Claude analizza i tuoi dati, ti dà un debrief e adatta l\'intensità della forza. Richiede il Worker coach attivo (vedi coach-worker/). I dati di allenamento vengono inviati al tuo Worker.'),
+    toggleField('Attiva il coach AI', settings.coachEnabled === true, v => { updateSettings({ coachEnabled: v }); renderProfile(); }),
+    settings.coachEnabled ? field('URL del Worker', settings.coachUrl || '', v => updateSettings({ coachUrl: v.trim() }), 'text') : null,
+    settings.coachEnabled ? field('Token (X-RunFit-Token)', settings.coachToken || '', v => updateSettings({ coachToken: v.trim() }), 'text') : null,
+    settings.coachEnabled ? el('button', { class: 'btn btn-ghost', onclick: testCoachConnection }, '🔌 Prova connessione') : null,
   ));
 
   // Zone HR

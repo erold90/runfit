@@ -903,6 +903,49 @@ body.session-active .view { padding-top: calc(8px + var(--safe-top)); }
   color: var(--text-muted);
   white-space: nowrap;
 }
+
+/* --- AI Coach card (schermata risultati) --- */
+.coach-card {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(56,189,248,0.10), var(--bg-elev));
+  border: 1px solid rgba(56,189,248,0.32);
+  text-align: left;
+}
+.coach-loading { opacity: 0.75; animation: coachPulse 1.2s ease-in-out infinite; }
+@keyframes coachPulse { 0%,100% { opacity: 0.5; } 50% { opacity: 0.9; } }
+.coach-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+.coach-avatar { font-size: 1.3rem; }
+.coach-title { font-weight: 700; color: #38bdf8; }
+.coach-flag {
+  margin-left: auto;
+  font-size: 0.75rem; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px;
+}
+.coach-flag-caution { background: rgba(245,158,11,0.16); color: #f59e0b; }
+.coach-flag-medical { background: rgba(239,68,68,0.18); color: #ef4444; }
+.coach-medical { border-color: rgba(239,68,68,0.5); }
+.coach-debrief { font-size: 0.95rem; line-height: 1.5; color: var(--text); }
+.coach-highlights {
+  margin: 10px 0 0; padding-left: 18px;
+  color: var(--text-muted); font-size: 0.88rem;
+}
+.coach-highlights li { margin: 2px 0; }
+.coach-applied {
+  margin-top: 10px; padding: 7px 10px;
+  background: rgba(16,185,129,0.12);
+  border-radius: 8px;
+  color: var(--accent); font-size: 0.85rem; font-weight: 600;
+}
+.coach-applied.coach-advice {
+  background: rgba(56,189,248,0.12); color: #38bdf8; font-weight: 500;
+}
+.coach-error { opacity: 0.85; }
+.coach-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
 .rpe-row {
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 6px;
