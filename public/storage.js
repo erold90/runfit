@@ -160,11 +160,25 @@ export function coachContext() {
   const progress = getProgress();
   const sessions = getSessions();
   const weights = getWeights();
-  const age = profile.birthYear ? new Date().getFullYear() - profile.birthYear : null;
+  const now = new Date();
+  const age = profile.birthYear ? now.getFullYear() - profile.birthYear : null;
+
+  // Etichetta temporale relativa calcolata sul FUSO LOCALE del dispositivo
+  // (i completedAt sono in UTC; questo evita errori "oggi/ieri" da timezone).
+  const relativeDay = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+    const diff = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+    if (diff <= 0) return 'oggi';
+    if (diff === 1) return 'ieri';
+    return `${diff} giorni fa`;
+  };
 
   // Ultime ~8 sessioni con i soli campi utili (l'ultima = quella appena fatta)
   const recent = sessions.slice(-8).map(s => ({
     type: s.type, title: s.title, week: s.week, completedAt: s.completedAt,
+    when: relativeDay(s.completedAt), // "oggi" | "ieri" | "N giorni fa"
     rpe: s.rpe, durationMin: s.durationMin, avgHr: s.avgHr, maxHr: s.maxHr, kcal: s.kcal,
     km: s.km, paceSecPerKm: s.paceSecPerKm,
     completedSets: s.completedSets, totalSets: s.totalSets,
@@ -175,6 +189,7 @@ export function coachContext() {
   const history = recent.slice(0, -1);
 
   return {
+    now: now.toLocaleString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }),
     profile: {
       name: profile.name, age, sex: profile.isMale ? 'M' : 'F',
       weightKg: profile.weightCurrentKg, targetKg: profile.weightTargetKg,
