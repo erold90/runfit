@@ -133,6 +133,14 @@ function renderHome() {
   const sessions = getSessions();
   const weights = getWeights();
   const profile = getProfile();
+  const guidedPlanOn = getSettings().guidedPlan !== false;
+  // Sessioni completate OGGI (giorno locale) — per una Home consapevole
+  const sameLocalDay = (iso) => {
+    if (!iso) return false;
+    const d = new Date(iso), n = new Date();
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  };
+  const sessionsToday = sessions.filter(s => sameLocalDay(s.completedAt));
 
   // Streak: giorni consecutivi (i riposi pianificati fanno da ponte)
   const streak = computeStreak(sessions, getSettings().restDays || [0]);
@@ -157,8 +165,8 @@ function renderHome() {
 
   // Card "Oggi" — piano del giorno (alterna corsa/forza, rispetta i giorni di riposo)
   const settings = getSettings();
-  if (settings.guidedPlan !== false) {
-    container.appendChild(buildTodayCard(progress, profile, session));
+  if (guidedPlanOn) {
+    container.appendChild(buildTodayCard(progress, profile, session, sessionsToday));
   }
 
   // Banner Test Iniziale (se non ancora fatto)
@@ -174,8 +182,9 @@ function renderHome() {
     ));
   }
 
-  // Card prossima sessione
+  // Card prossima sessione (solo modalità libera — in guidata guida la card "Oggi")
   const sessionLetter = ['A', 'B', 'C', 'D', 'E'][progress.currentSessionIndex] || '?';
+  if (!guidedPlanOn) {
   const next = el('div', { class: 'card session-next' },
     el('div', { class: 'card-label' }, `Prossima sessione · ${sessionLetter} · ${progress.currentSessionIndex + 1}/${weeklyVolume} della settimana`),
     el('div', { class: 'card-title' }, session.title),
@@ -196,6 +205,7 @@ function renderHome() {
     ),
   );
   container.appendChild(next);
+  }
 
   // KPI grid
   const kpi = el('div', { class: 'kpi-grid' },
@@ -234,8 +244,8 @@ function renderHome() {
     ));
   }
 
-  // Card FORZA (separata visivamente con tema viola)
-  if (profile.strengthEnabled !== false) {
+  // Card FORZA (solo modalità libera — in guidata la card "Oggi" gestisce tutto)
+  if (profile.strengthEnabled !== false && !guidedPlanOn) {
     const sLevel = profile.strengthLevel || 'returning';
     const sWeek = progress.strengthWeek || 1;
     const sIdx = progress.strengthSessionIndex || 0;
@@ -280,7 +290,8 @@ function renderHome() {
     ));
   }
 
-  // Card volume settimanale + adattamento
+  // Card volume settimanale + adattamento (solo modalità libera)
+  if (!guidedPlanOn) {
   container.appendChild(el('div', { class: 'card volume-card' },
     el('div', { class: 'card-label' }, 'Volume settimanale'),
     el('div', { class: 'volume-row' },
@@ -310,6 +321,7 @@ function renderHome() {
       }, `${['A', 'B', 'C', 'D', 'E'][i]} · ${Math.round(s.totalSeconds / 60)}'`)),
     ),
   ));
+  }
 }
 
 // --- Piano del giorno -------------------------------------------------------
@@ -330,11 +342,52 @@ function getTodayPlan(settings, strengthEnabled) {
   return { type: idx % 2 === 0 ? 'run' : 'strength', dow, label };
 }
 
-function buildTodayCard(progress, profile, runSession) {
+function buildTodayCard(progress, profile, runSession, sessionsToday = []) {
   const settings = getSettings();
   const strengthEnabled = profile.strengthEnabled !== false;
   const plan = getTodayPlan(settings, strengthEnabled);
+  const doneToday = sessionsToday || [];
 
+  // Riga riepilogo di una sessione fatta oggi
+  const doneLine = (s) => el('div', { class: 'today-done-line' },
+    el('span', { class: 'today-done-ic' }, s.type === 'strength' ? '💪' : '🏃'),
+    el('span', {}, `${s.title} · ${s.durationMin || Math.round((s.durationSec || 0) / 60)} min` +
+      `${s.rpe ? ' · RPE ' + s.rpe : ''}${s.km ? ' · ' + s.km + ' km' : ''}`),
+  );
+
+  // Pulsanti "allena ancora" (avvio libero delle due modalità)
+  const trainMoreButtons = () => {
+    const btns = [el('button', { class: 'btn btn-ghost btn-sm', onclick: () => startSession(runSession) }, '🏃 Corsa')];
+    if (strengthEnabled) {
+      const sIdx = progress.strengthSessionIndex || 0;
+      const sSession = getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx];
+      btns.push(el('button', { class: 'btn btn-ghost btn-sm', onclick: () => startStrengthSession(sSession) }, '💪 Forza'));
+    }
+    return btns;
+  };
+
+  // --- CASO 1: già allenato oggi → card "fatto", niente pressione ---
+  if (doneToday.length) {
+    return el('div', { class: 'card today-card today-done' },
+      el('div', { class: 'today-head' },
+        el('span', { class: 'today-icon' }, '✅'),
+        el('div', {},
+          el('div', { class: 'today-label' }, `Oggi · ${plan.label}`),
+          el('div', { class: 'today-title' }, doneToday.length > 1 ? 'Allenamenti di oggi fatti' : 'Allenamento di oggi fatto'),
+        ),
+      ),
+      el('div', { class: 'today-done-list' }, ...doneToday.map(doneLine)),
+      el('div', { class: 'today-desc' }, plan.type === 'rest'
+        ? 'Oggi era riposo e ti sei mosso comunque. Ascolta il recupero.'
+        : 'Bel lavoro. Ora recupera — è lì che arrivano i risultati. La prossima sessione è domani.'),
+      el('div', { class: 'today-more' },
+        el('span', { class: 'today-more-label' }, 'Vuoi fare altro?'),
+        el('div', { class: 'card-actions' }, ...trainMoreButtons()),
+      ),
+    );
+  }
+
+  // --- CASO 2: riposo e non allenato ---
   if (plan.type === 'rest') {
     return el('div', { class: 'card today-card today-rest' },
       el('div', { class: 'today-head' },
@@ -350,12 +403,10 @@ function buildTodayCard(progress, profile, runSession) {
     );
   }
 
+  // --- CASO 3: forza da fare ---
   if (plan.type === 'strength') {
-    const sLevel = profile.strengthLevel || 'returning';
-    const sWeek = progress.strengthWeek || 1;
     const sIdx = progress.strengthSessionIndex || 0;
-    const sScale = progress.strengthRepScale || 1;
-    const sSession = getStrengthWeekSessions(sWeek, sLevel, sScale)[sIdx];
+    const sSession = getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx];
     return el('div', { class: 'card today-card today-strength' },
       el('div', { class: 'today-head' },
         el('span', { class: 'today-icon' }, '💪'),
@@ -372,7 +423,7 @@ function buildTodayCard(progress, profile, runSession) {
     );
   }
 
-  // corsa
+  // --- CASO 4: corsa da fare ---
   const letter = ['A', 'B', 'C', 'D', 'E'][progress.currentSessionIndex] || '?';
   return el('div', { class: 'card today-card today-run' },
     el('div', { class: 'today-head' },
