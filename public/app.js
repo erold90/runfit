@@ -2545,6 +2545,13 @@ function renderProfile() {
     toggleField('Tieni schermo acceso', settings.keepScreenOn, v => updateSettings({ keepScreenOn: v })),
   ));
 
+  // Aggiornamenti app (svuota cache SW + ricarica)
+  container.appendChild(el('div', { class: 'card' },
+    el('div', { class: 'card-label' }, '🔄 Aggiornamenti app'),
+    el('div', { class: 'help-text' }, 'Se dopo un nuovo aggiornamento l\'app sembra vecchia, svuota la cache e ricarica all\'ultima versione (equivale a forzare la chiusura della PWA).'),
+    el('button', { class: 'btn btn-primary btn-block', onclick: forceAppRefresh }, '🔄 Svuota cache e ricarica'),
+  ));
+
   // Cloud sync
   container.appendChild(el('div', { class: 'card' },
     el('div', { class: 'card-label' }, 'Backup cloud (opzionale)'),
@@ -2734,6 +2741,24 @@ function showWeightModal() {
       }, 'Salva'),
     ),
   ));
+}
+
+// --- Forza aggiornamento: deregistra SW, svuota cache, ricarica ------------
+async function forceAppRefresh() {
+  if (!confirm('Svuotare la cache e ricaricare l\'app all\'ultima versione?')) return;
+  toast('🔄 Aggiornamento in corso…');
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch { /* best effort */ }
+  // URL con cache-bust per saltare anche la cache HTTP del browser
+  location.replace(location.pathname + '?u=' + Date.now());
 }
 
 // --- Toast -----------------------------------------------------------------
