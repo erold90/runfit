@@ -56,6 +56,7 @@ const defaultProgress = {
   // Programma FORZA (separato dalla corsa)
   strengthWeek: 1,
   strengthSessionIndex: 0, // 0=S1, 1=S2, 2=S3
+  strengthRepScale: 1,     // moltiplicatore di intensità (reps) adattivo, ricalcolato dal log
 };
 
 const defaultSettings = {

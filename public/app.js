@@ -23,8 +23,8 @@ import {
 } from './assessment.js';
 import { SessionRunner, StrengthRunner, speak, loadVoices } from './coach.js';
 import {
-  getStrengthWeekSessions, strengthWeekTip, nextStrengthWeek,
-  STRENGTH_TOTAL_WEEKS,
+  getStrengthWeekSessions, strengthWeekTip,
+  STRENGTH_TOTAL_WEEKS, recomputeStrengthState, sessionRepRatio,
 } from './strength.js';
 
 // --- DOM helpers -----------------------------------------------------------
@@ -229,7 +229,8 @@ function renderHome() {
     const sLevel = profile.strengthLevel || 'returning';
     const sWeek = progress.strengthWeek || 1;
     const sIdx = progress.strengthSessionIndex || 0;
-    const strengthSessions = getStrengthWeekSessions(sWeek, sLevel);
+    const sScale = progress.strengthRepScale || 1;
+    const strengthSessions = getStrengthWeekSessions(sWeek, sLevel, sScale);
     const sSession = strengthSessions[sIdx];
     const sLetter = ['S1', 'S2', 'S3'][sIdx];
 
@@ -343,7 +344,8 @@ function buildTodayCard(progress, profile, runSession) {
     const sLevel = profile.strengthLevel || 'returning';
     const sWeek = progress.strengthWeek || 1;
     const sIdx = progress.strengthSessionIndex || 0;
-    const sSession = getStrengthWeekSessions(sWeek, sLevel)[sIdx];
+    const sScale = progress.strengthRepScale || 1;
+    const sSession = getStrengthWeekSessions(sWeek, sLevel, sScale)[sIdx];
     return el('div', { class: 'card today-card today-strength' },
       el('div', { class: 'today-head' },
         el('span', { class: 'today-icon' }, '💪'),
@@ -1587,18 +1589,25 @@ function saveStrengthFeedback(args) {
   };
   saveSession(record);
 
-  // Avanza posizione: prossima sessione di forza, se ultima della settimana avanza settimana
-  if (progress.strengthSessionIndex < 2) {
-    progress.strengthSessionIndex++;
-  } else {
-    progress.strengthWeek = nextStrengthWeek(progress.strengthWeek, {
-      rpe, completedSets, totalSets,
-    });
-    progress.strengthSessionIndex = 0;
-  }
-  saveProgress(progress);
+  // Ricalcola la progressione forza dall'intero log (settimana, sessione, intensità reps).
+  // Un'unica fonte di verità: vale sia qui sia dopo una modifica/eliminazione nello storico.
+  applyStrengthProgress();
 
   showStrengthResultsScreen(record);
+}
+
+// Replay deterministico: rilegge tutte le sessioni di forza e riallinea il progress.
+// Ritorna lo stato calcolato (week, sessionIndex, repScale) per eventuali toast.
+function applyStrengthProgress() {
+  const profile = getProfile();
+  const progress = getProgress();
+  const strengthSessions = getSessions().filter(s => s.type === 'strength');
+  const state = recomputeStrengthState(strengthSessions, profile.strengthLevel || 'returning');
+  progress.strengthWeek = state.strengthWeek;
+  progress.strengthSessionIndex = state.strengthSessionIndex;
+  progress.strengthRepScale = state.strengthRepScale;
+  saveProgress(progress);
+  return state;
 }
 
 function showStrengthResultsScreen(record) {
@@ -1694,7 +1703,14 @@ function historyCard(s) {
     ),
     el('button', {
       class: 'icon-btn history-delete',
-      onclick: (e) => { e.stopPropagation(); if (confirm('Eliminare questa sessione?')) { deleteSession(s.id); renderHistory(); } },
+      onclick: (e) => {
+        e.stopPropagation();
+        if (confirm('Eliminare questa sessione?')) {
+          deleteSession(s.id);
+          if (s.type === 'strength') applyStrengthProgress(); // riallinea la progressione
+          renderHistory();
+        }
+      },
     }, '🗑'),
   );
 }
@@ -1757,6 +1773,54 @@ function showSessionEditor(s) {
   notesInput.value = st.notes;
   notesInput.addEventListener('input', e => { st.notes = e.target.value; });
 
+  // --- Ripetizioni per esercizio (solo forza) — editabili, muovono l'algoritmo ---
+  const repsLog = isStrength && Array.isArray(s.completedSetsLog)
+    ? s.completedSetsLog.map(x => ({ ...x }))
+    : null;
+  let repsSection = null;
+  if (repsLog && repsLog.length) {
+    // Raggruppa le serie per esercizio mantenendo l'ordine di esecuzione
+    const groups = [];
+    const byKey = {};
+    repsLog.forEach((entry, i) => {
+      let g = byKey[entry.exerciseKey];
+      if (!g) { g = byKey[entry.exerciseKey] = { name: entry.exerciseName, items: [] }; groups.push(g); }
+      g.items.push({ entry, i });
+    });
+    const ratioBadge = el('span', { class: 'reps-ratio-badge' });
+    const refreshRatio = () => {
+      const r = sessionRepRatio(repsLog);
+      ratioBadge.textContent = r != null ? `media ${Math.round(r * 100)}% del target` : '';
+    };
+    repsSection = el('div', { class: 'feedback-section' },
+      el('label', { class: 'feedback-label' }, '🏋️ Ripetizioni per esercizio', ratioBadge),
+      el('div', { class: 'feedback-hint' }, 'Correggi le reps reali serie per serie: l\'algoritmo ritara settimana e intensità delle prossime sessioni in base a quanto superi il target.'),
+      ...groups.map(g => el('div', { class: 'reps-edit-group' },
+        el('div', { class: 'reps-edit-ex' }, g.name),
+        el('div', { class: 'reps-edit-rows' },
+          ...g.items.map(({ entry, i }) => {
+            const inp = el('input', {
+              type: 'number', inputmode: 'numeric', min: '0', max: '500', step: '1',
+              value: entry.actualReps != null ? String(entry.actualReps) : '',
+              class: 'feedback-input reps-edit-input',
+            });
+            inp.addEventListener('input', e => {
+              const v = parseInt(e.target.value);
+              repsLog[i].actualReps = Number.isFinite(v) ? v : null;
+              refreshRatio();
+            });
+            return el('div', { class: 'reps-edit-cell' },
+              el('span', { class: 'reps-edit-set' }, `S${entry.setNumber}`),
+              inp,
+              el('span', { class: 'reps-edit-target' }, `/ ${entry.targetReps}`),
+            );
+          }),
+        ),
+      )),
+    );
+    refreshRatio();
+  }
+
   // ESSENZIALI: gli unici che servono (FC media → algoritmo; gli altri per le statistiche)
   const essentialFields = isStrength
     ? el('div', { class: 'feedback-grid' },
@@ -1814,6 +1878,7 @@ function showSessionEditor(s) {
       el('div', { class: 'feedback-hint' }, 'Passo, calorie e zone vengono ricalcolati al salvataggio.'),
       essentialFields,
     ),
+    repsSection,
     optionalSection,
     el('div', { class: 'feedback-section' },
       el('label', { class: 'feedback-label' }, 'Note'),
@@ -1822,8 +1887,12 @@ function showSessionEditor(s) {
     el('div', { class: 'editor-actions' },
       el('button', { class: 'btn btn-ghost', onclick: () => setView('history') }, 'Annulla'),
       el('button', { class: 'btn btn-primary', onclick: () => {
-        const updated = recomputeSessionRecord(s, st);
+        const updated = recomputeSessionRecord(s, st, repsLog);
         updateSession(updated);
+        if (isStrength) {
+          const state = applyStrengthProgress();
+          toast(`💪 Progressione aggiornata · settimana ${state.strengthWeek}, intensità ${Math.round(state.strengthRepScale * 100)}%`);
+        }
         setView('history');
       } }, 'Salva modifiche'),
     ),
@@ -1831,7 +1900,7 @@ function showSessionEditor(s) {
 }
 
 // Ricalcola i campi derivati (passo, calorie, durata, zone) dai valori grezzi
-function recomputeSessionRecord(orig, st) {
+function recomputeSessionRecord(orig, st, repsLog = null) {
   const profile = getProfile();
   const durationMin = parseFloatOrNull(st.durationMin) != null ? parseFloatOrNull(st.durationMin) : orig.durationMin;
   const durationSec = Math.round((durationMin || 0) * 60) || orig.durationSec;
@@ -1870,6 +1939,8 @@ function recomputeSessionRecord(orig, st) {
       z3: minToSec(parseFloatOrNull(st.timeZ3)),
     },
     kcal, kcalSource,
+    // Reps modificate (se passate): aggiorna il log e ricaches il numero di serie completate
+    ...(repsLog ? { completedSetsLog: repsLog, completedSets: repsLog.length } : {}),
     editedAt: new Date().toISOString(),
   };
 }
@@ -2212,12 +2283,13 @@ function renderProfile() {
       { value: 'advanced', label: 'Advanced — allenato regolarmente' },
     ], v => updateProfile({ strengthLevel: v })),
     toggleField('Modulo forza attivo nella Home', profile.strengthEnabled !== false, v => updateProfile({ strengthEnabled: v })),
-    el('div', { class: 'help-text' }, `Sei in settimana ${getProgress().strengthWeek || 1}/${STRENGTH_TOTAL_WEEKS} forza, sessione ${['S1','S2','S3'][getProgress().strengthSessionIndex || 0]}.`),
+    el('div', { class: 'help-text' }, `Sei in settimana ${getProgress().strengthWeek || 1}/${STRENGTH_TOTAL_WEEKS} forza, sessione ${['S1','S2','S3'][getProgress().strengthSessionIndex || 0]}, intensità ${Math.round((getProgress().strengthRepScale || 1) * 100)}% del target. L'intensità si adatta da sola in base alle reps che registri.`),
     el('button', { class: 'btn btn-ghost', onclick: () => {
-      if (confirm('Vuoi tornare alla settimana 1 della forza?')) {
+      if (confirm('Vuoi tornare alla settimana 1 della forza? (azzera anche l\'intensità adattiva)')) {
         const pr = getProgress();
         pr.strengthWeek = 1;
         pr.strengthSessionIndex = 0;
+        pr.strengthRepScale = 1;
         saveProgress(pr);
         renderProfile();
         toast('Programma forza resettato');

@@ -849,6 +849,60 @@ body.session-active .view { padding-top: calc(8px + var(--safe-top)); }
   width: 100%;
   font-size: 1rem;
 }
+
+/* --- Editor reps per esercizio (storico forza) --- */
+.reps-ratio-badge {
+  margin-left: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--strength);
+  background: var(--strength-bg);
+  border: 1px solid var(--strength-border);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.reps-edit-group {
+  background: var(--strength-bg);
+  border: 1px solid var(--strength-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.reps-edit-ex {
+  font-weight: 600;
+  color: var(--strength);
+  margin-bottom: 8px;
+  font-size: 0.92rem;
+}
+.reps-edit-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.reps-edit-cell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-elev);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+}
+.reps-edit-set {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.reps-edit-input {
+  width: 56px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.reps-edit-target {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 .rpe-row {
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 6px;

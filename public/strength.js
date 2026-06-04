@@ -276,10 +276,12 @@ function phaseFromWeek(week, level = 'beginner') {
   return Math.min(3, phase + offset);
 }
 
-function buildBlock(progressionBlock, week, level) {
+function buildBlock(progressionBlock, week, level, repScale = 1) {
   const phase = phaseFromWeek(week, level);
   const cfg = progressionBlock[phase];
   const ex = CATALOG[cfg.ex];
+  // repScale = moltiplicatore di intensità adattivo (reps) — vedi recomputeStrengthState
+  const reps = Math.max(1, Math.round(cfg.reps * repScale));
   return {
     key: cfg.ex,
     name: ex.name,
@@ -288,14 +290,15 @@ function buildBlock(progressionBlock, week, level) {
     formTip: ex.formTip,
     gifUrl: ex.gifUrl,
     sets: cfg.sets,
-    reps: cfg.reps,
+    reps,
+    baseReps: cfg.reps,   // reps "di listino" della fase, prima dello scaling
     restSec: cfg.restSec,
   };
 }
 
-function buildSession(id, title, focus, sessionProgression, week, level) {
+function buildSession(id, title, focus, sessionProgression, week, level, repScale = 1) {
   const exercises = Object.keys(sessionProgression).map(slot =>
-    buildBlock(sessionProgression[slot], week, level)
+    buildBlock(sessionProgression[slot], week, level, repScale)
   );
   return {
     id,
@@ -305,6 +308,7 @@ function buildSession(id, title, focus, sessionProgression, week, level) {
     estimatedMinutes: estimateMinutes(exercises),
     week,
     level,
+    repScale,
   };
 }
 
@@ -323,26 +327,26 @@ function estimateMinutes(exercises) {
 // ----------------------------------------------------------------------------
 export const STRENGTH_TOTAL_WEEKS = 8;
 
-export function buildStrengthSessionS1(week, level = 'beginner') {
+export function buildStrengthSessionS1(week, level = 'beginner', repScale = 1) {
   return buildSession(`strength-w${week}-s1`, 'Forza S1 — Strength',
-    'Forza pura, esecuzione controllata', PROGRESSION.S1, week, level);
+    'Forza pura, esecuzione controllata', PROGRESSION.S1, week, level, repScale);
 }
-export function buildStrengthSessionS2(week, level = 'beginner') {
+export function buildStrengthSessionS2(week, level = 'beginner', repScale = 1) {
   return buildSession(`strength-w${week}-s2`, 'Forza S2 — Conditioning',
-    'Intensità più alta, rest brevi', PROGRESSION.S2, week, level);
+    'Intensità più alta, rest brevi', PROGRESSION.S2, week, level, repScale);
 }
-export function buildStrengthSessionS3(week, level = 'beginner') {
+export function buildStrengthSessionS3(week, level = 'beginner', repScale = 1) {
   return buildSession(`strength-w${week}-s3`, 'Forza S3 — Mix dinamico',
-    'Esplosività + cardio integrato', PROGRESSION.S3, week, level);
+    'Esplosività + cardio integrato', PROGRESSION.S3, week, level, repScale);
 }
 
 /** Le 3 sessioni della settimana corrente */
-export function getStrengthWeekSessions(week, level = 'beginner') {
+export function getStrengthWeekSessions(week, level = 'beginner', repScale = 1) {
   const w = Math.min(Math.max(week, 1), STRENGTH_TOTAL_WEEKS);
   return [
-    buildStrengthSessionS1(w, level),
-    buildStrengthSessionS2(w, level),
-    buildStrengthSessionS3(w, level),
+    buildStrengthSessionS1(w, level, repScale),
+    buildStrengthSessionS2(w, level, repScale),
+    buildStrengthSessionS3(w, level, repScale),
   ];
 }
 
@@ -365,10 +369,94 @@ export function strengthWeekTip(week, level = 'beginner') {
 export function nextStrengthWeek(currentWeek, lastFeedback) {
   if (currentWeek >= STRENGTH_TOTAL_WEEKS) return 5; // ricicla dalla 5
   if (lastFeedback) {
-    const { rpe = 6, completedSets = 0, totalSets = 12 } = lastFeedback;
+    const { rpe = 6, completedSets = 0, totalSets = 12, repRatio = 1 } = lastFeedback;
     const completion = totalSets > 0 ? completedSets / totalSets : 1;
-    if (rpe >= 9 || completion < 0.6) return Math.max(1, currentWeek);
-    if (rpe <= 4 && completion >= 0.95) return Math.min(STRENGTH_TOTAL_WEEKS, currentWeek + 2);
+    if (rpe >= 9 || completion < 0.6) return Math.max(1, currentWeek);   // troppo duro → ripeti
+    // Salta una settimana (= sale di fase) se è andata troppo facile:
+    //   RPE molto basso, OPPURE molte più reps del target con fatica contenuta
+    const veryEasy = rpe <= 4 && completion >= 0.95;
+    const easyHighReps = repRatio >= 1.35 && rpe <= 6 && completion >= 0.95;
+    if (veryEasy || easyHighReps) return Math.min(STRENGTH_TOTAL_WEEKS, currentWeek + 2);
   }
   return currentWeek + 1;
+}
+
+// ----------------------------------------------------------------------------
+// ADATTAMENTO REPS — rapporto reps effettive/target + replay della progressione
+// ----------------------------------------------------------------------------
+export const STRENGTH_START_WEEK = 1; // tutti partono da settimana 1 (la fase dipende dal livello)
+const REP_SCALE_MIN = 0.7;
+const REP_SCALE_MAX = 1.7;
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+/** Media del rapporto reps effettive/target su tutte le serie loggate (null se non disponibile). */
+export function sessionRepRatio(completedSetsLog) {
+  if (!Array.isArray(completedSetsLog) || !completedSetsLog.length) return null;
+  const ratios = completedSetsLog
+    .filter(s => s && s.targetReps > 0 && s.actualReps != null)
+    .map(s => s.actualReps / s.targetReps);
+  if (!ratios.length) return null;
+  return ratios.reduce((a, b) => a + b, 0) / ratios.length;
+}
+
+/** Quanto spostare il moltiplicatore di intensità (reps) in base a una singola sessione. */
+function repScaleDelta({ rpe = 6, completion = 1, repRatio = 1 }) {
+  if (completion < 0.6) return -0.10;               // mollata a metà → alleggerisci
+  if (completion >= 0.85) {
+    if (rpe <= 4 && repRatio >= 1.2) return 0.12;   // facilissima + molte reps extra
+    if (rpe <= 6 && repRatio >= 1.15) return 0.07;  // comoda + reps sopra target
+    if (rpe <= 6 && repRatio >= 1.0) return 0.03;   // gestita bene
+    if (rpe >= 9 || repRatio < 0.8) return -0.10;   // durissima o reps crollate
+    if (rpe >= 8 || repRatio < 0.9) return -0.05;
+  }
+  return 0;
+}
+
+/**
+ * Replay deterministico di TUTTE le sessioni di forza (in ordine cronologico)
+ * per ricalcolare lo stato di progressione. Unica fonte di verità: modificare
+ * o eliminare una sessione nello storico e ri-eseguire questa funzione riallinea
+ * settimana, indice sessione e intensità (repScale).
+ *
+ * @param {Array} strengthSessions  record di tipo 'strength'
+ * @param {string} level            'beginner' | 'returning' | 'advanced'
+ * @returns {{strengthWeek:number, strengthSessionIndex:number, strengthRepScale:number}}
+ */
+export function recomputeStrengthState(strengthSessions, level = 'beginner', startWeek = STRENGTH_START_WEEK) {
+  let week = startWeek;
+  let idx = 0;            // 0=S1, 1=S2, 2=S3
+  let repScale = 1.0;
+
+  const ordered = (strengthSessions || []).slice()
+    .sort((a, b) => new Date(a.completedAt || 0) - new Date(b.completedAt || 0));
+
+  for (const s of ordered) {
+    const totalSets = s.totalSets || 0;
+    const completedSets = s.completedSets || 0;
+    const completion = totalSets > 0 ? completedSets / totalSets : 1;
+    const repRatio = sessionRepRatio(s.completedSetsLog) ?? 1;
+    const rpe = s.rpe ?? 6;
+
+    // 1) Intensità reps (leva fine, ogni sessione)
+    repScale = clamp(repScale + repScaleDelta({ rpe, completion, repRatio }), REP_SCALE_MIN, REP_SCALE_MAX);
+
+    // 2) Avanzamento posizione (leva grossa: cambia esercizi/varianti)
+    if (idx < 2) {
+      idx++;
+    } else {
+      const prevPhase = phaseFromWeek(week, level);
+      week = nextStrengthWeek(week, { rpe, completedSets, totalSets, repRatio });
+      idx = 0;
+      // Salendo di fase gli esercizi diventano più duri: ritara l'intensità verso 1
+      const newPhase = phaseFromWeek(week, level);
+      if (newPhase > prevPhase) repScale = clamp(1 + (repScale - 1) * 0.4, REP_SCALE_MIN, REP_SCALE_MAX);
+    }
+  }
+
+  return {
+    strengthWeek: week,
+    strengthSessionIndex: idx,
+    strengthRepScale: Math.round(repScale * 100) / 100,
+  };
 }
