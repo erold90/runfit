@@ -96,12 +96,19 @@ function setView(name) {
   currentView = name;
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === name));
   $$('.view').forEach(v => v.classList.toggle('active', v.dataset.view === name));
+  // FAB Coach: visibile solo se attivo e non già in chat / sessione attiva
+  const fab = document.getElementById('coach-fab');
+  if (fab) {
+    const show = (getSettings().coachEnabled === true) && ['home', 'history', 'stats'].includes(name);
+    fab.hidden = !show;
+  }
   const renderer = {
     home: renderHome,
     workout: renderWorkout,
     history: renderHistory,
     stats: renderStats,
     profile: renderProfile,
+    coach: renderCoachChat,
   }[name];
   if (renderer) renderer();
 }
@@ -1672,6 +1679,81 @@ function flagBadge(flag) {
   return null;
 }
 
+// --- Chat libera col coach -------------------------------------------------
+let coachChat = []; // {role:'user'|'assistant', content, pending?}
+
+function renderCoachChat() {
+  const container = $('#view-coach');
+  container.innerHTML = '';
+  const s = getSettings();
+
+  const header = el('div', { class: 'chat-header' },
+    el('button', { class: 'btn btn-ghost btn-back', onclick: () => setView('home') }, '‹ Home'),
+    el('div', { class: 'chat-title' }, '🤖 Coach'),
+    el('button', { class: 'icon-btn', title: 'Nuova conversazione', onclick: () => { coachChat = []; renderCoachChat(); } }, '🗑'),
+  );
+
+  if (!s.coachEnabled || !s.coachUrl) {
+    container.appendChild(el('div', { class: 'chat-view' }, header,
+      el('div', { class: 'empty-state' },
+        el('div', { class: 'empty-icon' }, '🤖'),
+        el('div', {}, 'Attiva il Coach AI in Profilo per poterci chattare.'),
+        el('button', { class: 'btn btn-primary', onclick: () => setView('profile') }, 'Vai al Profilo'),
+      )));
+    return;
+  }
+
+  const msgs = el('div', { class: 'chat-messages' });
+  if (!coachChat.length) {
+    msgs.appendChild(el('div', { class: 'chat-intro' },
+      'Ciao Daniele! Chiedimi quello che vuoi — "posso allenarmi oggi?", "come sto andando?", dubbi su un esercizio, un fastidio. Vedo i tuoi dati.'));
+  }
+  coachChat.forEach(m => msgs.appendChild(
+    el('div', { class: `chat-msg chat-${m.role}${m.pending ? ' chat-pending' : ''}` }, m.content)));
+
+  const input = el('textarea', { class: 'chat-input', rows: '1', placeholder: 'Scrivi al coach…' });
+  const send = () => {
+    const text = input.value.trim();
+    if (!text || coachChat.some(m => m.pending)) return;
+    input.value = '';
+    sendChatMessage(text);
+  };
+  const sendBtn = el('button', { class: 'btn btn-primary chat-send', onclick: send }, '➤');
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+
+  container.appendChild(el('div', { class: 'chat-view' },
+    header, msgs,
+    el('div', { class: 'chat-inputbar' }, input, sendBtn),
+  ));
+  requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
+}
+
+async function sendChatMessage(text) {
+  coachChat.push({ role: 'user', content: text });
+  coachChat.push({ role: 'assistant', content: 'sto pensando…', pending: true });
+  renderCoachChat();
+  const s = getSettings();
+  let reply;
+  try {
+    const url = s.coachUrl.replace(/\/+$/, '') + '/chat';
+    const payloadMsgs = coachChat.filter(m => !m.pending).map(m => ({ role: m.role, content: m.content }));
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(s.coachToken ? { 'X-RunFit-Token': s.coachToken } : {}) },
+      body: JSON.stringify({ context: coachContext(), messages: payloadMsgs }),
+    });
+    const data = await res.json().catch(() => ({}));
+    reply = res.ok && data.reply ? data.reply : `⚠️ ${data.error || 'errore'}${data.detail ? ': ' + data.detail : ''}`;
+  } catch {
+    reply = '⚠️ Coach non raggiungibile (sei offline?).';
+  }
+  coachChat = coachChat.filter(m => !m.pending);
+  coachChat.push({ role: 'assistant', content: reply });
+  renderCoachChat();
+}
+
 /** Test di connessione al Worker dal Profilo. */
 function testCoachConnection() {
   toast('🤖 Contatto il coach…');
@@ -2670,6 +2752,9 @@ async function init() {
   $$('.tab').forEach(t => {
     t.addEventListener('click', () => setView(t.dataset.view));
   });
+  // FAB Coach
+  const fab = document.getElementById('coach-fab');
+  if (fab) fab.addEventListener('click', () => setView('coach'));
   // PWA install prompt (silenziato)
   window.addEventListener('beforeinstallprompt', e => e.preventDefault());
   // Service Worker
