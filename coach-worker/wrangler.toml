@@ -1,0 +1,19 @@
+name = "runfit-coach"
+main = "src/index.js"
+compatibility_date = "2026-05-01"
+workers_dev = true
+
+# --- Secrets (MAI in chiaro qui) ---
+# Chiave API Anthropic — in produzione:
+#   wrangler secret put ANTHROPIC_API_KEY
+# In sviluppo locale: vedi .dev.vars (gitignored)
+#
+# Token condiviso PWA <-> Worker per evitare abusi del proxy:
+#   wrangler secret put RUNFIT_TOKEN
+#   (genera: openssl rand -hex 32)
+
+# --- Variabili pubbliche (non segrete) ---
+[vars]
+# Origin autorizzati a chiamare il proxy (CORS). Aggiungi/rimuovi qui.
+ALLOWED_ORIGINS = "https://erold90.github.io,http://localhost:8000,http://127.0.0.1:8000"
+ANTHROPIC_MODEL = "claude-haiku-4-5"

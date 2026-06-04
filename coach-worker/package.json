@@ -1,0 +1,10 @@
+{
+  "name": "runfit-coach",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Proxy Cloudflare Worker verso l'Anthropic Messages API per il coach AI di RunFit",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  }
+}
