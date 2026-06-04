@@ -57,7 +57,8 @@ const defaultProgress = {
   strengthWeek: 1,
   strengthSessionIndex: 0, // 0=S1, 1=S2, 2=S3
   strengthRepScale: 1,     // moltiplicatore di intensità (reps) adattivo, ricalcolato dal log
-  coachRepScaleBias: 0,    // bias persistente proposto dall'AI coach, sommato dopo il replay
+  coachRepScaleBias: 0,    // bias intensità forza proposto dall'AI coach (persistente)
+  coachWeekBias: 0,        // bias settimana forza proposto dall'AI coach (persistente)
 };
 
 const defaultSettings = {

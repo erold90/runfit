@@ -1472,6 +1472,18 @@ function renderStrengthScreen(session) {
     restDisplay.style.display = 'block';
     restDisplay.textContent = `Riposo: ${e.detail.seconds}s`;
     repInput.style.display = 'none';
+    // Anticipa il PROSSIMO esercizio/serie durante il riposo (era fermo su quello finito)
+    const nx = currentStrength.currentExercise;
+    const nextSet = currentStrength.setIndex + 1;
+    phaseLabel.textContent = `Riposo · poi esercizio ${currentStrength.exerciseIndex + 1} / ${session.exercises.length}`;
+    exerciseName.textContent = nx.name;
+    variantSub.textContent = nx.muscle;
+    formTipEl.textContent = nx.formTip;
+    bigCounter.textContent = `${nx.reps}`;
+    counterLabel.textContent = 'prossime ripetizioni';
+    setNumberEl.textContent = `Serie ${nextSet} / ${nx.sets}`;
+    if (nx.gifUrl) { gifEl.src = nx.gifUrl; gifEl.alt = nx.name; gifEl.style.display = ''; }
+    else { gifEl.style.display = 'none'; }
   });
   currentStrength.addEventListener('tick', e => {
     restDisplay.textContent = `Riposo: ${e.detail.restRemaining}s`;
@@ -1486,6 +1498,7 @@ function renderStrengthScreen(session) {
     variantSub.textContent = ex.muscle;
     formTipEl.textContent = ex.formTip;
     bigCounter.textContent = `${ex.reps}`;
+    counterLabel.textContent = 'ripetizioni';
     setNumberEl.textContent = `Serie ${e.detail.setNumber} / ${ex.sets}`;
     repInput.setAttribute('placeholder', `${ex.reps}`);
     // Aggiorna GIF dimostrativa
@@ -1665,14 +1678,16 @@ function applyStrengthProgress() {
   const progress = getProgress();
   const strengthSessions = getSessions().filter(s => s.type === 'strength');
   const state = recomputeStrengthState(strengthSessions, profile.strengthLevel || 'returning');
-  // Il bias del coach AI è persistente e si somma DOPO il replay deterministico,
-  // così non viene sovrascritto dal ricalcolo dal log.
-  const bias = progress.coachRepScaleBias || 0;
-  progress.strengthWeek = state.strengthWeek;
+  // I bias del coach AI sono persistenti e si sommano DOPO il replay deterministico,
+  // così non vengono sovrascritti dal ricalcolo dal log. Il coach ha pieno controllo
+  // (entro limiti ampi anti-rottura), l'algoritmo resta come base/fallback offline.
+  const rsBias = progress.coachRepScaleBias || 0;
+  const wkBias = progress.coachWeekBias || 0;
+  progress.strengthWeek = Math.min(8, Math.max(1, state.strengthWeek + wkBias));
   progress.strengthSessionIndex = state.strengthSessionIndex;
-  progress.strengthRepScale = Math.min(1.7, Math.max(0.7, state.strengthRepScale + bias));
+  progress.strengthRepScale = Math.min(2.0, Math.max(0.5, state.strengthRepScale + rsBias));
   saveProgress(progress);
-  return { ...state, strengthRepScale: progress.strengthRepScale };
+  return { ...state, strengthWeek: progress.strengthWeek, strengthRepScale: progress.strengthRepScale };
 }
 
 // ============================================================================
@@ -1703,27 +1718,58 @@ async function fetchCoach() {
 }
 
 /**
- * Applica l'aggiustamento del coach ENTRO I GUARDRAIL.
- * - forza: repScaleDelta (±0.15) accumulato nel bias persistente → ricalcolo.
- * - corsa / weekDelta: NON applicato in automatico (la progressione corsa ha la
- *   regola del 10% e va trattata con prudenza) → resta solo consiglio testuale.
+ * Applica l'aggiustamento del coach. Il coach ha pieno controllo della
+ * progressione (al posto dei guardrail rigidi dell'algoritmo); restano solo
+ * limiti AMPI anti-rottura. Il vero freno è il giudizio del coach (system prompt).
+ * - forza: repScaleDelta (intensità, ±0.4/chiamata) + weekDelta (settimana, ±2)
+ *   accumulati in bias persistenti → ricalcolo.
+ * - corsa: weekDelta sulla settimana corsa (±1/chiamata, più prudente: impatto).
  * - flag "medical": nessuna modifica.
+ * Ritorna un riepilogo di cosa è stato applicato (o null).
  */
 function applyCoachAdjustment(adj, flag) {
   if (!adj || flag === 'medical') return null;
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-  if (adj.domain === 'strength') {
-    const delta = clamp(Number(adj.repScaleDelta) || 0, -0.15, 0.15);
-    if (delta !== 0) {
-      const progress = getProgress();
-      const bias = clamp((progress.coachRepScaleBias || 0) + delta, -0.4, 0.4);
-      progress.coachRepScaleBias = bias;
-      saveProgress(progress);
-      const state = applyStrengthProgress(); // ricalcola repScale includendo il bias
-      return { domain: 'strength', repScalePct: Math.round(state.strengthRepScale * 100) };
+  const dom = adj.domain || 'none';
+  const progress = getProgress();
+  const parts = [];
+
+  if (dom === 'strength' || dom === 'both') {
+    const delta = clamp(Number(adj.repScaleDelta) || 0, -0.4, 0.4);
+    const wk = clamp(parseInt(adj.weekDelta) || 0, -2, 2);
+    if (delta) progress.coachRepScaleBias = clamp((progress.coachRepScaleBias || 0) + delta, -0.5, 1.0);
+    if (wk) progress.coachWeekBias = clamp((progress.coachWeekBias || 0) + wk, -4, 6);
+    if (delta || wk) parts.push('strength');
+  }
+  if (dom === 'run' || dom === 'both') {
+    const wk = clamp(parseInt(adj.weekDelta) || 0, -1, 1); // corsa: 1 settimana/volta (regola 10%)
+    if (wk) {
+      progress.currentWeek = clamp((progress.currentWeek || 1) + wk, 1, 12);
+      progress.currentSessionIndex = 0;
+      parts.push('run');
     }
   }
-  return null;
+  saveProgress(progress);
+
+  let strengthState = null;
+  if (parts.includes('strength')) strengthState = applyStrengthProgress();
+  if (!parts.length) return null;
+  return {
+    domain: parts.length > 1 ? 'both' : parts[0],
+    repScalePct: strengthState ? Math.round(strengthState.strengthRepScale * 100) : null,
+    strengthWeek: strengthState ? strengthState.strengthWeek : null,
+    runWeek: parts.includes('run') ? getProgress().currentWeek : null,
+  };
+}
+
+/** Frase leggibile di cosa ha cambiato il coach (per debrief/chat). */
+function coachChangeSummary(applied) {
+  if (!applied) return null;
+  const bits = [];
+  if (applied.repScalePct != null) bits.push(`intensità forza ${applied.repScalePct}%`);
+  if (applied.strengthWeek != null && (applied.domain === 'strength' || applied.domain === 'both')) bits.push(`settimana forza ${applied.strengthWeek}`);
+  if (applied.runWeek != null) bits.push(`settimana corsa ${applied.runWeek}`);
+  return bits.length ? '✓ Aggiornato: ' + bits.join(' · ') : null;
 }
 
 function flagBadge(flag) {
@@ -1799,6 +1845,11 @@ async function sendChatMessage(text) {
     });
     const data = await res.json().catch(() => ({}));
     reply = res.ok && data.reply ? data.reply : `⚠️ ${data.error || 'errore'}${data.detail ? ': ' + data.detail : ''}`;
+    // Il coach può decidere di modificare il programma direttamente dalla chat
+    if (res.ok && data.change) {
+      const summary = coachChangeSummary(applyCoachAdjustment(data.change, data.flag));
+      if (summary) reply += '\n\n' + summary;
+    }
   } catch {
     reply = '⚠️ Coach non raggiungibile (sei offline?).';
   }
@@ -1860,12 +1911,9 @@ function mountCoachDebrief() {
       card.appendChild(el('ul', { class: 'coach-highlights' },
         ...c.highlights.map(h => el('li', {}, h))));
     }
-    if (applied && applied.domain === 'strength') {
-      card.appendChild(el('div', { class: 'coach-applied' },
-        `✓ Intensità forza aggiornata: ${applied.repScalePct}% del target`));
-    } else if (c.adjustment && c.adjustment.action && c.adjustment.action !== 'keep' && c.adjustment.domain === 'run') {
-      card.appendChild(el('div', { class: 'coach-applied coach-advice' },
-        `💡 Consiglio corsa: ${c.adjustment.reason || c.adjustment.action} (applicalo tu, la progressione corsa resta prudente)`));
+    const summary = coachChangeSummary(applied);
+    if (summary) {
+      card.appendChild(el('div', { class: 'coach-applied' }, summary));
     }
   });
 }

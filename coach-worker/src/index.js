@@ -30,6 +30,9 @@ HRmax ~183, Zona 2 = 110-128 bpm. Obiettivo PRIMARIO: dimagrimento preservando l
 # PROGRAMMA FORZA — È A CORPO LIBERO
 Nessun peso, nessun bilanciere: solo esercizi bodyweight dinamici. NON suggerire mai "più kg", "aumenta il carico" o attrezzi. Per alzare l'intensità si aumentano le RIPETIZIONI o si passa a varianti più difficili.
 
+# AUTORITÀ E GIUDIZIO
+Hai pieno controllo del programma di Daniele: puoi modificare l'intensità della forza e la settimana di corsa/forza quando i dati o una sua richiesta sensata lo giustificano. Le modifiche le decidi TU, non un algoritmo fisso. Ma sei un COACH, non un esecutore: NON assecondare richieste irragionevoli o rischiose (es. "triplica tutto", "portami a settimana 8 subito", modifiche che ignorano fatica, sonno scarso o un dolore). In quei casi rifiuta con rispetto, spiega il perché e proponi un'alternativa sensata. Le tue modifiche restano graduali e difendibili scientificamente. Quando applichi un cambiamento, dillo chiaramente.
+
 # RIFERIMENTI TEMPORALI
 I dati includono "now" (data e ora attuali di Daniele) e ogni sessione ha un campo "when" già calcolato sul suo fuso orario ("oggi", "ieri", "N giorni fa"). Usa SEMPRE "when" per dire quando ha fatto qualcosa; NON dedurre tu le date dai timestamp "completedAt" (sono in UTC e ti farebbero sbagliare oggi/ieri).
 
@@ -47,8 +50,8 @@ Nel messaggio utente ricevi un JSON con: la sessione appena conclusa, lo storico
 - Struttura: 1 cosa andata bene + 1 dato oggettivo di progresso (o regressione) + 1 focus per la prossima.
 - Onesto e conciso: 4-6 frasi.
 
-# AGGIUSTAMENTI (entro limiti rigidi)
-Proponi UN aggiustamento per la prossima sessione. Limiti invalicabili: repScaleDelta tra -0.15 e +0.15; weekDelta tra -1 e +1. Se i dati non giustificano un cambio, lascia tutto invariato (action "keep"). La regola del 10% sulla corsa prevale su qualunque aggiustamento.
+# AGGIUSTAMENTI
+Decidi tu l'aggiustamento per la prossima sessione (vedi AUTORITÀ E GIUDIZIO). domain: 'strength', 'run', 'both' o 'none'. Puoi cambiare l'intensità forza (repScaleDelta, tipicamente -0.3..+0.3 a sessione) e la settimana (weekDelta, di norma -1/+1, fino a ±2 sulla forza se chiaramente giustificato). Sulla CORSA resta prudente (regola del 10%, max 1 settimana per volta). Se i dati non giustificano un cambio, action "keep" con delta 0.
 
 # OUTPUT
 Rispondi SEMPRE e SOLO chiamando lo strumento "coach_feedback". Non scrivere testo fuori dallo strumento. flag "medical" se c'è un sintomo di allarme. Sii sempre dalla sua parte.`;
@@ -59,7 +62,9 @@ const SYSTEM_CHAT = SYSTEM_BASE + `
 # MODALITÀ CHAT
 Stai conversando con Daniele fuori dall'allenamento. Nel primo messaggio trovi i suoi dati attuali (profilo, progressi, storico recente). Rispondi alle sue domande in modo conversazionale, conciso (2-5 frasi salvo richiesta di approfondire), pratico e basato sui suoi dati reali.
 Se chiede "posso allenarmi oggi?", valuta la readiness (RPE recenti, recupero, stanchezza/sonno che riferisce) e dai una risposta netta con la motivazione.
-Non inventare dati che non vedi: se ti manca un'informazione, chiedila. La sicurezza medica qui sopra vale sempre. Niente JSON e niente strumenti: solo testo per lui.`;
+Non inventare dati che non vedi: se ti manca un'informazione, chiedila.
+
+PUOI MODIFICARE IL PROGRAMMA ANCHE DA QUI: se Daniele chiede una modifica sensata (o i dati la giustificano), usa lo strumento "apply_change" per applicarla davvero, poi spiega a parole cosa hai cambiato e perché. Se la richiesta è irragionevole o rischiosa (vedi AUTORITÀ E GIUDIZIO), NON usare lo strumento: spiega perché e proponi un'alternativa. Usa lo strumento solo per modifiche concrete al programma, mai per semplici consigli o domande. La sicurezza medica vale sempre: se c'è un sintomo di allarme, niente modifiche, stop e medico.`;
 
 // --- Tool che forza il JSON strutturato di /coach --------------------------
 const COACH_TOOL = {
@@ -77,10 +82,10 @@ const COACH_TOOL = {
       adjustment: {
         type: 'object',
         properties: {
-          domain: { type: 'string', enum: ['run', 'strength', 'none'] },
+          domain: { type: 'string', enum: ['run', 'strength', 'both', 'none'] },
           action: { type: 'string', enum: ['keep', 'easier', 'harder', 'deload', 'rest'] },
-          repScaleDelta: { type: 'number', description: 'Tra -0.15 e 0.15. 0 se nessun cambio.' },
-          weekDelta: { type: 'integer', description: 'Tra -1 e 1. 0 se nessun cambio.' },
+          repScaleDelta: { type: 'number', description: 'Variazione intensità forza, tipicamente -0.3..0.3. 0 se nessun cambio.' },
+          weekDelta: { type: 'integer', description: 'Variazione settimana, di norma -1/+1 (fino a ±2 forza). 0 se nessun cambio.' },
           reason: { type: 'string', description: 'Motivazione breve basata sui dati.' },
         },
         required: ['domain', 'action', 'repScaleDelta', 'weekDelta', 'reason'],
@@ -88,6 +93,23 @@ const COACH_TOOL = {
       flag: { type: 'string', enum: ['none', 'caution', 'medical'] },
     },
     required: ['debrief', 'highlights', 'adjustment', 'flag'],
+  },
+};
+
+// --- Tool opzionale per modifiche dalla CHAT -------------------------------
+const CHANGE_TOOL = {
+  name: 'apply_change',
+  description:
+    "Applica una modifica concreta al programma di allenamento di Daniele. Usalo SOLO quando una modifica è giustificata dai dati o da una sua richiesta sensata; NON usarlo per consigli generici, domande, o richieste irragionevoli/rischiose.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      domain: { type: 'string', enum: ['strength', 'run', 'both'] },
+      repScaleDelta: { type: 'number', description: 'Variazione intensità forza, tipicamente -0.3..0.3.' },
+      weekDelta: { type: 'integer', description: 'Variazione settimana, di norma -1/+1 (fino a ±2 forza).' },
+      reason: { type: 'string', description: 'Perché applichi questa modifica (breve).' },
+    },
+    required: ['domain', 'reason'],
   },
 };
 
@@ -183,12 +205,15 @@ async function handleChat(env, model, context, messages) {
     model,
     max_tokens: 800,
     system: [{ type: 'text', text: SYSTEM_CHAT, cache_control: { type: 'ephemeral' } }],
+    tools: [CHANGE_TOOL], // non forzato: il coach lo usa solo se opportuno
     messages: apiMessages,
   });
   if (!result.ok) return { error: result.error };
-  const reply = extractText(result.data);
+  let reply = extractText(result.data);
+  const change = extractToolInput(result.data, 'apply_change');
+  if (!reply && change) reply = 'Fatto, ho aggiornato il programma.';
   if (!reply) return { error: { detail: 'risposta vuota' } };
-  return { reply, usage: result.data.usage || null };
+  return { reply, change, usage: result.data.usage || null };
 }
 
 // --- Handler ----------------------------------------------------------------
@@ -224,7 +249,7 @@ export default {
       if (!messages.length) return json({ error: 'Campo "messages" mancante' }, 400, cors);
       const r = await handleChat(env, model, context, messages);
       if (r.error) return json({ error: 'Il coach non ha risposto', detail: r.error.detail || '' }, 502, cors);
-      return json({ reply: r.reply, usage: r.usage }, 200, cors);
+      return json({ reply: r.reply, change: r.change || null, usage: r.usage }, 200, cors);
     }
 
     // default: /coach
