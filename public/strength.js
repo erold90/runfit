@@ -195,8 +195,8 @@ const CATALOG = {
     name: 'Rematore australiano',
     icon: '🛶',
     muscle: 'Dorso + bicipiti + core',
-    gear: 'Tavolo robusto o sbarra bassa',
-    formTip: 'Sotto un tavolo solido (o sbarra bassa), corpo dritto e teso. Tira il petto verso il bordo stringendo le scapole, scendi controllando.',
+    gear: 'Sbarra bassa',
+    formTip: 'Sotto una sbarra bassa, corpo dritto e teso appeso da sotto. Tira il petto verso la sbarra stringendo le scapole, scendi controllando. Più orizzontale è il corpo, più è duro.',
     gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/06/Inverted-Row.gif',
   },
   pikePushup: {
@@ -238,6 +238,14 @@ const CATALOG = {
     muscle: 'Gambe + adduttori + mobilità',
     formTip: 'Gambe larghe. Scendi tutto su un lato piegando quel ginocchio mentre l\'altra gamba resta tesa, poi trasla sull\'altro lato. Busto eretto.',
     gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/05/Cossack-Squat.gif',
+  },
+  bulgarianSplitSquat: {
+    name: 'Bulgarian split squat',
+    icon: '🦿',
+    muscle: 'Quadricipiti + glutei + stabilità',
+    gear: 'Panchina',
+    formTip: 'Piede posteriore appoggiato su una panchina dietro di te. Scendi dritto col ginocchio anteriore, busto leggermente avanti, risali spingendo col tallone. Completa, poi cambia gamba. Brutale sui quadricipiti monolateralmente.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2022/02/Bodyweight-Bulgarian-Split-Squat.gif',
   },
   standingCalfRaise: {
     name: 'Calf raise (polpacci)',
