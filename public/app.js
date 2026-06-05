@@ -463,6 +463,62 @@ function kpiCard(label, value, icon) {
   );
 }
 
+// --- Icone SVG (sostituiscono le emoji: coerenti, scalabili, leggibili) -----
+const STAT_ICONS = {
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/>',
+  flame: '<path d="M12 3c.8 2.8 3.5 3.9 3.5 7.5a3.5 3.5 0 0 1-7 0c0-1 .4-1.9.9-2.5.4 1 .9 1.4 1.6 1.6C10.5 8 11 5.2 12 3Z"/>',
+  ruler: '<path d="M4 8.5 8.5 4 20 15.5 15.5 20Z"/><path d="m8 9 1.5 1.5M10.5 6.5 12 8M11 12l1.5 1.5M13.5 9.5 15 11"/>',
+  gauge: '<path d="M12 13.5a1.8 1.8 0 0 0 1.5-2.9L12 8.5"/><path d="M5 18a8 8 0 1 1 14 0"/>',
+  heart: '<path d="M12 20s-7-4.6-7-10a3.8 3.8 0 0 1 7-2 3.8 3.8 0 0 1 7 2c0 5.4-7 10-7 10Z"/>',
+  scale: '<path d="M12 4v16M7 8h10"/><path d="M7 8 4 14a3 3 0 0 0 6 0Z"/><path d="M17 8l-3 6a3 3 0 0 0 6 0Z"/>',
+  zap: '<path d="M13 3 5 13h6l-1 8 8-10h-6Z"/>',
+  arrowDown: '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  arrowUp: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  arrowRight: '<path d="M5 12h14"/>',
+};
+
+function svgIcon(name, size = 20) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.innerHTML = STAT_ICONS[name] || '';
+  return svg;
+}
+
+// KPI con icona SVG (al posto delle emoji)
+function statKpi(label, value, iconName) {
+  return el('div', { class: 'kpi' },
+    el('div', { class: 'kpi-icon' }, svgIcon(iconName, 22)),
+    el('div', { class: 'kpi-value' }, String(value)),
+    el('div', { class: 'kpi-label' }, label),
+  );
+}
+
+// Confronta la media della prima metà con quella della seconda metà di una serie
+function halfTrend(values) {
+  if (!values || values.length < 2) return null;
+  const mid = Math.floor(values.length / 2);
+  const avg = a => a.reduce((s, x) => s + x, 0) / a.length;
+  const older = avg(values.slice(0, mid || 1));
+  const newer = avg(values.slice(mid));
+  return { delta: newer - older, older, newer };
+}
+
+// Blocco "stat" usato quando i dati sono troppo pochi per un grafico sensato
+function bigStat(label, value, hint) {
+  return el('div', { class: 'card stat-block' },
+    el('div', { class: 'card-label' }, label),
+    el('div', { class: 'stat-big' }, value),
+    hint ? el('div', { class: 'chart-hint' }, hint) : null,
+  );
+}
+
 function fmtMinutes(seconds) {
   const m = Math.floor(seconds / 60);
   if (m < 60) return `${m} min`;
@@ -2417,6 +2473,82 @@ function fmtPace(secPerKm) {
 }
 
 // --- View: Statistiche ----------------------------------------------------
+// Blocco VERDETTO in cima: legge i dati e dice a colpo d'occhio come va,
+// con segnali chiave (peso, FC, passo, Zona 2). Risolve il "data-dump".
+function renderStatsInsight(sessions, weights, profile) {
+  const signals = [];
+
+  // Peso: l'obiettivo. Giù = bene.
+  if (weights.length) {
+    const cur = weights[weights.length - 1].kg;
+    const start = (profile.weightStartKg ?? weights[0].kg);
+    const d = +(cur - start).toFixed(1);
+    if (Math.abs(d) >= 0.1) {
+      signals.push({ key: 'weight', label: 'Peso',
+        value: (d < 0 ? '−' : '+') + Math.abs(d).toFixed(1) + ' kg',
+        dir: d < 0 ? 'good' : 'bad' });
+    }
+  }
+
+  // FC media sulle uscite con cardio. Giù = cuore più efficiente.
+  const th = halfTrend(sessions.filter(s => s.avgHr).map(s => s.avgHr));
+  if (th && Math.abs(th.delta) >= 1) {
+    signals.push({ key: 'hr', label: 'FC media',
+      value: (th.delta < 0 ? '−' : '+') + Math.abs(Math.round(th.delta)) + ' bpm',
+      dir: th.delta < 0 ? 'good' : 'bad' });
+  }
+
+  // Passo (sec/km). Giù = più veloce.
+  const tp = halfTrend(sessions.filter(s => s.paceSecPerKm).map(s => s.paceSecPerKm));
+  if (tp && Math.abs(tp.delta) >= 3) {
+    signals.push({ key: 'pace', label: 'Passo',
+      value: (tp.delta < 0 ? '−' : '+') + Math.abs(Math.round(tp.delta)) + ' s/km',
+      dir: tp.delta < 0 ? 'good' : 'bad' });
+  }
+
+  // Zona 2 nell'ultima settimana. Più = meglio (zona brucia-grassi).
+  const z2Sessions = sessions.filter(s => s.timeInZoneSec?.z2);
+  if (z2Sessions.length) {
+    const lastWeek = Math.max(...z2Sessions.map(s => s.week || 1));
+    const z2min = Math.round(z2Sessions.filter(s => (s.week || 1) === lastWeek)
+      .reduce((sum, s) => sum + s.timeInZoneSec.z2 / 60, 0));
+    if (z2min > 0) signals.push({ key: 'z2', label: 'Zona 2 (sett.)', value: z2min + ' min', dir: 'good' });
+  }
+
+  const good = signals.filter(s => s.dir === 'good').length;
+  const weightUpAtStart = signals.some(s => s.key === 'weight' && s.dir === 'bad') && weights.length <= 6;
+
+  let verdict, vclass;
+  if (good >= 2) { verdict = 'Stai migliorando'; vclass = 'good'; }
+  else if (good === 1) { verdict = 'Sulla strada giusta'; vclass = 'good'; }
+  else if (sessions.length < 3) { verdict = 'Buon avvio'; vclass = 'neutral'; }
+  else { verdict = 'Tieni la rotta'; vclass = 'neutral'; }
+
+  let sub;
+  if (weightUpAtStart) sub = 'Il peso sale all\'inizio (acqua e glicogeno muscolare): è fisiologico, si inverte nelle prossime settimane.';
+  else if (good >= 1) sub = 'I segnali chiave vanno nella direzione giusta. Continua col carico attuale.';
+  else sub = 'I trend si formano con più sessioni: la costanza viene prima dell\'intensità.';
+
+  const signalRow = el('div', { class: 'insight-signals' },
+    ...signals.map(s => {
+      const arrow = s.key === 'z2' ? 'arrowUp' : (s.dir === 'good' ? 'arrowDown' : 'arrowUp');
+      return el('div', { class: 'signal signal-' + s.dir },
+        svgIcon(arrow, 14),
+        el('span', { class: 'signal-label' }, s.label),
+        el('span', { class: 'signal-value' }, s.value));
+    }),
+  );
+
+  return el('div', { class: 'insight insight-' + vclass },
+    el('div', { class: 'insight-head' },
+      el('span', { class: 'insight-badge' }, svgIcon(vclass === 'good' ? 'arrowUp' : 'arrowRight', 18)),
+      el('span', { class: 'insight-verdict' }, verdict),
+    ),
+    el('div', { class: 'insight-sub' }, sub),
+    signals.length ? signalRow : null,
+  );
+}
+
 function renderStats() {
   const container = $('#view-stats');
   container.innerHTML = '';
@@ -2429,85 +2561,111 @@ function renderStats() {
     return;
   }
 
+  const profile = getProfile();
+  const weights = getWeights();
+
   container.appendChild(el('h2', { class: 'view-title' }, 'Statistiche & Progressione'));
 
-  // KPI generali
+  // 1) VERDETTO in cima
+  container.appendChild(renderStatsInsight(sessions, weights, profile));
+
+  // 2) KPI sintetici (icone SVG, non emoji)
   const totalSec = sessions.reduce((s, x) => s + x.durationSec, 0);
   const totalKcal = sessions.reduce((s, x) => s + (x.kcal || 0), 0);
   const totalKm = sessions.reduce((s, x) => s + (x.km || 0), 0);
   const avgRpe = (sessions.reduce((s, x) => s + x.rpe, 0) / sessions.length).toFixed(1);
-  const avgHr = (() => {
-    const withHr = sessions.filter(s => s.avgHr);
-    if (!withHr.length) return null;
-    return Math.round(withHr.reduce((s, x) => s + x.avgHr, 0) / withHr.length);
-  })();
-
   container.appendChild(el('div', { class: 'kpi-grid' },
-    kpiCard('Tempo totale', fmtMinutes(totalSec), '⏱'),
-    kpiCard('Calorie', `${totalKcal.toLocaleString('it-IT')}`, '🔋'),
-    kpiCard('Distanza', `${totalKm.toFixed(1)} km`, '📏'),
-    kpiCard('RPE medio', avgRpe, '💪'),
+    statKpi('Tempo totale', fmtMinutes(totalSec), 'clock'),
+    statKpi('Calorie', totalKcal.toLocaleString('it-IT'), 'flame'),
+    statKpi('Distanza', `${totalKm.toFixed(1)} km`, 'ruler'),
+    statKpi('RPE medio', avgRpe, 'gauge'),
   ));
 
-  // Grafico volume settimanale
-  container.appendChild(el('div', { class: 'card chart-card' },
-    el('div', { class: 'card-label' }, 'Volume settimanale (minuti)'),
-    el('canvas', { id: 'chart-volume', height: '200' }),
-  ));
+  // Helper: card con canvas (drawCharts() la popola per id)
+  const chartCard = (label, canvasId, hint) => el('div', { class: 'card chart-card' },
+    el('div', { class: 'card-label' }, label),
+    hint ? el('div', { class: 'chart-hint' }, hint) : null,
+    el('canvas', { id: canvasId, height: '200' }),
+  );
 
-  // Grafico RPE nel tempo
-  container.appendChild(el('div', { class: 'card chart-card' },
-    el('div', { class: 'card-label' }, 'RPE per sessione'),
-    el('canvas', { id: 'chart-rpe', height: '200' }),
-  ));
-
-  // Grafico FC media
-  if (avgHr) {
-    container.appendChild(el('div', { class: 'card chart-card' },
-      el('div', { class: 'card-label' }, 'Frequenza cardiaca media'),
-      el('canvas', { id: 'chart-hr', height: '200' }),
-    ));
-  }
-
-  // Grafico Passo medio (min/km) — indicatore di efficienza/velocità
-  const withPace = sessions.filter(s => s.paceSecPerKm);
-  if (withPace.length > 0) {
-    container.appendChild(el('div', { class: 'card chart-card' },
-      el('div', { class: 'card-label' }, 'Passo medio (min/km)'),
-      el('canvas', { id: 'chart-pace', height: '200' }),
-    ));
-  }
-
-  // Grafico Tempo in Zona 2 — minuti totali settimanali in fat-burning
-  const withZ2 = sessions.filter(s => s.timeInZoneSec?.z2);
-  if (withZ2.length > 0) {
-    container.appendChild(el('div', { class: 'card chart-card' },
-      el('div', { class: 'card-label' }, 'Volume Zone 2 per settimana (min)'),
-      el('div', { class: 'chart-hint' }, 'Tempo speso nella zona 110-128 bpm — la zona regina per dimagrire'),
-      el('canvas', { id: 'chart-z2', height: '200' }),
-    ));
-  }
-
-  // Grafico Cadenza media
-  const withCad = sessions.filter(s => s.cadence);
-  if (withCad.length > 0) {
-    container.appendChild(el('div', { class: 'card chart-card' },
-      el('div', { class: 'card-label' }, 'Cadenza media (passi/min)'),
-      el('div', { class: 'chart-hint' }, 'Target ottimale: 170-180 spm per ridurre impatto al ginocchio'),
-      el('canvas', { id: 'chart-cad', height: '200' }),
-    ));
-  }
-
-  // Grafico peso
-  const weights = getWeights();
+  // 3) PESO (promosso: è l'obiettivo)
   if (weights.length > 1) {
-    container.appendChild(el('div', { class: 'card chart-card' },
-      el('div', { class: 'card-label' }, 'Andamento peso'),
-      el('canvas', { id: 'chart-weight', height: '200' }),
-    ));
+    container.appendChild(chartCard('Andamento peso', 'chart-weight'));
+  } else if (weights.length === 1) {
+    container.appendChild(bigStat('Peso', `${weights[0].kg.toFixed(1)} kg`,
+      `Target ${profile.weightTargetKg} kg. Registra il peso più volte per vedere il trend.`));
   }
 
-  // Disegna grafici dopo che il DOM è pronto
+  // 4) ZONA 2 (il KPI per dimagrire, promosso)
+  const z2Sessions = sessions.filter(s => s.timeInZoneSec?.z2);
+  const byWeekZ2 = {};
+  z2Sessions.forEach(s => { byWeekZ2[s.week] = (byWeekZ2[s.week] || 0) + s.timeInZoneSec.z2 / 60; });
+  const z2Weeks = Object.keys(byWeekZ2);
+  if (z2Weeks.length >= 2) {
+    container.appendChild(chartCard('Volume Zona 2 per settimana (min)', 'chart-z2',
+      'Tempo nella zona 110-128 bpm: la zona regina per bruciare grasso.'));
+  } else if (z2Weeks.length === 1) {
+    container.appendChild(bigStat('Zona 2 questa settimana', `${Math.round(byWeekZ2[z2Weeks[0]])} min`,
+      'Minuti nella zona brucia-grassi (110-128 bpm). Il confronto settimanale arriva con la prossima settimana.'));
+  }
+
+  // 5) VOLUME settimanale
+  const byWeekMin = {};
+  sessions.forEach(s => { byWeekMin[s.week] = (byWeekMin[s.week] || 0) + (s.durationMin || 0); });
+  const weekKeys = Object.keys(byWeekMin).sort((a, b) => a - b);
+  if (weekKeys.length >= 2) {
+    container.appendChild(chartCard('Volume settimanale (minuti)', 'chart-volume'));
+  } else if (weekKeys.length === 1) {
+    container.appendChild(bigStat(`Volume settimana ${weekKeys[0]}`, `${Math.round(byWeekMin[weekKeys[0]])} min`,
+      'Minuti totali allenati. La prossima settimana si affiancherà per il confronto.'));
+  }
+
+  // 6) PASSO medio
+  const paceCount = sessions.filter(s => s.paceSecPerKm).length;
+  if (paceCount >= 3) {
+    container.appendChild(chartCard('Passo medio (min/km)', 'chart-pace',
+      'La linea che scende vuol dire che stai diventando più veloce.'));
+  } else if (paceCount >= 1) {
+    const last = [...sessions].reverse().find(s => s.paceSecPerKm);
+    container.appendChild(bigStat('Passo (ultima corsa)', fmtPace(last.paceSecPerKm) + '/km',
+      'Servono almeno 3 corse per vedere il trend del passo.'));
+  }
+
+  // 7) FC media
+  const hrCount = sessions.filter(s => s.avgHr).length;
+  if (hrCount >= 3) {
+    container.appendChild(chartCard('Frequenza cardiaca media', 'chart-hr',
+      'A parità di passo, una FC più bassa significa cuore più efficiente.'));
+  } else if (hrCount >= 1) {
+    const last = [...sessions].reverse().find(s => s.avgHr);
+    container.appendChild(bigStat('FC media (ultima corsa)', `${last.avgHr} bpm`,
+      'Servono almeno 3 corse per il trend cardiaco.'));
+  }
+
+  // 8) RPE — grafico solo se varia e ci sono abbastanza dati; altrimenti stat
+  const rpes = sessions.map(s => s.rpe);
+  const rpeConstant = rpes.every(r => r === rpes[0]);
+  if (sessions.length >= 3 && !rpeConstant) {
+    container.appendChild(chartCard('RPE per sessione', 'chart-rpe',
+      'Sforzo percepito 1-10. Stabile = carico ben gestito.'));
+  } else {
+    container.appendChild(bigStat('RPE per sessione',
+      rpeConstant ? `Costante a ${rpes[0]}` : `Media ${avgRpe}`,
+      rpeConstant ? 'Sforzo percepito identico ogni volta: ottima regolarità.' : 'Sforzo percepito 1-10 sulle tue sessioni.'));
+  }
+
+  // 9) CADENZA
+  const cadCount = sessions.filter(s => s.cadence).length;
+  if (cadCount >= 3) {
+    container.appendChild(chartCard('Cadenza media (passi/min)', 'chart-cad',
+      'Target 170-180 spm per ridurre l\'impatto al ginocchio.'));
+  } else if (cadCount >= 1) {
+    const last = [...sessions].reverse().find(s => s.cadence);
+    container.appendChild(bigStat('Cadenza (ultima corsa)', `${last.cadence} spm`,
+      'Target 170-180 spm. Servono 3 corse per il trend.'));
+  }
+
+  // Disegna i grafici delle card effettivamente presenti
   requestAnimationFrame(() => drawCharts(sessions));
 }
 
