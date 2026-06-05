@@ -26,6 +26,7 @@ import { SessionRunner, StrengthRunner, speak, loadVoices } from './coach.js';
 import {
   getStrengthWeekSessions, strengthWeekTip,
   STRENGTH_TOTAL_WEEKS, recomputeStrengthState, sessionRepRatio,
+  strengthCatalog, buildCustomStrengthSession,
 } from './strength.js';
 
 // --- DOM helpers -----------------------------------------------------------
@@ -252,8 +253,8 @@ function renderHome() {
     const sIdx = progress.strengthSessionIndex || 0;
     const sScale = progress.strengthRepScale || 1;
     const strengthSessions = getStrengthWeekSessions(sWeek, sLevel, sScale);
-    const sSession = strengthSessions[sIdx];
-    const sLetter = ['S1', 'S2', 'S3'][sIdx];
+    const sSession = progress.customStrengthSession || strengthSessions[sIdx];
+    const sLetter = progress.customStrengthSession ? 'su misura' : ['S1', 'S2', 'S3'][sIdx];
 
     container.appendChild(el('div', { class: 'card strength-card' },
       el('div', { class: 'card-label strength-label' }, `💪 Forza · ${sLetter} · ${sIdx + 1}/3 della settimana`),
@@ -361,7 +362,7 @@ function buildTodayCard(progress, profile, runSession, sessionsToday = []) {
     const btns = [el('button', { class: 'btn btn-ghost btn-sm', onclick: () => startSession(runSession) }, '🏃 Corsa')];
     if (strengthEnabled) {
       const sIdx = progress.strengthSessionIndex || 0;
-      const sSession = getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx];
+      const sSession = progress.customStrengthSession || getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx];
       btns.push(el('button', { class: 'btn btn-ghost btn-sm', onclick: () => startStrengthSession(sSession) }, '💪 Forza'));
     }
     return btns;
@@ -1669,6 +1670,10 @@ function saveStrengthFeedback(args) {
   };
   saveSession(record);
 
+  // Consuma la sessione di forza su misura del coach: dopo averla fatta si torna al programma
+  const pr0 = getProgress();
+  if (pr0.customStrengthSession) { pr0.customStrengthSession = null; saveProgress(pr0); }
+
   // Ricalcola la progressione forza dall'intero log (settimana, sessione, intensità reps).
   // Un'unica fonte di verità: vale sia qui sia dopo una modifica/eliminazione nello storico.
   applyStrengthProgress();
@@ -1714,7 +1719,7 @@ function buildCoachContext() {
     const runS = progress.customRunSession || runSessions[runIdx];
     const sIdx = progress.strengthSessionIndex || 0;
     const strS = strengthEnabled
-      ? getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx]
+      ? (progress.customStrengthSession || getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx])
       : null;
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
     ctx.plan = {
@@ -1722,7 +1727,8 @@ function buildCoachContext() {
       todayLabel: plan.label,
       restDays: (settings.restDays || []).map(d => dayNames[d]),
       guided: settings.guidedPlan !== false,
-      customRunActive: !!progress.customRunSession, // c'è già una corsa su misura in coda
+      customRunActive: !!progress.customRunSession,
+      customStrengthActive: !!progress.customStrengthSession,
       nextRun: runS ? {
         title: runS.title, focus: runS.focus,
         durationMin: Math.round(runS.totalSeconds / 60),
@@ -1732,15 +1738,18 @@ function buildCoachContext() {
       } : null,
       nextStrength: strS ? {
         title: strS.title, focus: strS.focus,
-        session: ['S1', 'S2', 'S3'][sIdx], week: progress.strengthWeek,
-        estimatedMinutes: strS.estimatedMinutes,
+        session: progress.customStrengthSession ? 'su misura' : ['S1', 'S2', 'S3'][sIdx],
+        week: progress.strengthWeek, estimatedMinutes: strS.estimatedMinutes,
+        exercises: progress.customStrengthSession ? strS.exercises.map(e => `${e.name} ${e.sets}x${e.reps}`) : undefined,
       } : null,
     };
+    // Catalogo esercizi forza disponibili (per le riscritture del coach)
+    ctx.strengthCatalog = strengthCatalog();
   } catch { /* best effort: il piano è un extra */ }
   return ctx;
 }
 
-/** Chiama il Worker coach. Ritorna {coach}, {skipped} o {error}. Mai lancia. */
+/** Chiama il Worker coach (debrief). Ritorna {data}, {skipped} o {error}. Mai lancia. */
 async function fetchCoach() {
   const s = getSettings();
   if (!s.coachEnabled || !s.coachUrl) return { skipped: true };
@@ -1756,8 +1765,8 @@ async function fetchCoach() {
     });
     if (!res.ok) return { error: `HTTP ${res.status}` };
     const data = await res.json();
-    if (!data || !data.coach) return { error: 'risposta vuota' };
-    return { coach: data.coach };
+    if (!data || !data.debrief) return { error: 'risposta vuota' };
+    return { data };
   } catch (e) {
     return { error: (e && e.message) || 'rete' };
   }
@@ -1850,15 +1859,36 @@ function applyRunRewrite(rw) {
   return custom;
 }
 
+/**
+ * Applica una RISCRITTURA della prossima sessione di forza proposta dal coach.
+ * Risolve gli esercizi dal catalogo, valida e salva progress.customStrengthSession.
+ * Ritorna la sessione custom o null.
+ */
+function applyStrengthRewrite(rw) {
+  if (!rw || !Array.isArray(rw.exercises) || !rw.exercises.length) return null;
+  const custom = buildCustomStrengthSession(
+    (rw.title || 'Forza su misura').toString().slice(0, 60),
+    (rw.focus || 'Personalizzata dal coach').toString().slice(0, 60),
+    rw.exercises,
+  );
+  if (!custom) return null;
+  custom.id = 'str-custom-' + Date.now();
+  const progress = getProgress();
+  progress.customStrengthSession = custom;
+  saveProgress(progress);
+  return custom;
+}
+
 /** Frase leggibile di cosa ha cambiato il coach (per debrief/chat). */
-function coachChangeSummary(applied, rewrite) {
+function coachChangeSummary(applied, rewriteRun, rewriteStr) {
   const bits = [];
   if (applied) {
     if (applied.repScalePct != null) bits.push(`intensità forza ${applied.repScalePct}%`);
     if (applied.strengthWeek != null && (applied.domain === 'strength' || applied.domain === 'both')) bits.push(`settimana forza ${applied.strengthWeek}`);
     if (applied.runWeek != null) bits.push(`settimana corsa ${applied.runWeek}`);
   }
-  if (rewrite) bits.push(`prossima corsa riscritta: "${rewrite.title}" (${Math.round(rewrite.totalSeconds / 60)} min)`);
+  if (rewriteRun) bits.push(`prossima corsa riscritta: "${rewriteRun.title}" (${Math.round(rewriteRun.totalSeconds / 60)} min)`);
+  if (rewriteStr) bits.push(`prossima forza riscritta: "${rewriteStr.title}" (${rewriteStr.exercises.length} esercizi)`);
   return bits.length ? '✓ Aggiornato: ' + bits.join(' · ') : null;
 }
 
@@ -1935,12 +1965,13 @@ async function sendChatMessage(text) {
     });
     const data = await res.json().catch(() => ({}));
     reply = res.ok && data.reply ? data.reply : `⚠️ ${data.error || 'errore'}${data.detail ? ': ' + data.detail : ''}`;
-    // Il coach può modificare il programma direttamente dalla chat (intensità/
-    // settimana) e/o riscrivere la prossima sessione di corsa
-    if (res.ok && (data.change || data.rewriteRun)) {
+    // Il coach può modificare il programma dalla chat: intensità/settimana e/o
+    // riscrivere la prossima sessione di corsa o di forza
+    if (res.ok && (data.change || data.rewriteRun || data.rewriteStrength)) {
       const applied = data.change ? applyCoachAdjustment(data.change, data.flag) : null;
-      const rewrite = data.rewriteRun ? applyRunRewrite(data.rewriteRun) : null;
-      const summary = coachChangeSummary(applied, rewrite);
+      const rewriteRun = data.rewriteRun ? applyRunRewrite(data.rewriteRun) : null;
+      const rewriteStr = data.rewriteStrength ? applyStrengthRewrite(data.rewriteStrength) : null;
+      const summary = coachChangeSummary(applied, rewriteRun, rewriteStr);
       if (summary) reply += '\n\n' + summary;
     }
   } catch {
@@ -1979,7 +2010,7 @@ function mountCoachDebrief() {
 
   fetchCoach().then(r => {
     if (r.skipped) { card.remove(); return; }
-    if (r.error || !r.coach) {
+    if (r.error || !r.data) {
       card.className = 'coach-card coach-error';
       card.innerHTML = '';
       card.appendChild(el('div', { class: 'coach-head' },
@@ -1990,21 +2021,19 @@ function mountCoachDebrief() {
         'Debrief AI non raggiungibile (offline o errore). L\'allenamento è salvato e la progressione aggiornata comunque.'));
       return;
     }
-    const c = r.coach;
-    const applied = applyCoachAdjustment(c.adjustment, c.flag);
-    card.className = 'coach-card' + (c.flag === 'medical' ? ' coach-medical' : '');
+    const d = r.data;
+    // Il coach valuta E prepara le prossime sessioni: applica le sue azioni
+    const applied = d.change ? applyCoachAdjustment(d.change, null) : null;
+    const rewriteRun = d.rewriteRun ? applyRunRewrite(d.rewriteRun) : null;
+    const rewriteStr = d.rewriteStrength ? applyStrengthRewrite(d.rewriteStrength) : null;
+    card.className = 'coach-card';
     card.innerHTML = '';
     card.appendChild(el('div', { class: 'coach-head' },
       el('span', { class: 'coach-avatar' }, '🤖'),
       el('span', { class: 'coach-title' }, 'Il tuo coach'),
-      flagBadge(c.flag),
     ));
-    card.appendChild(el('div', { class: 'coach-debrief' }, c.debrief || ''));
-    if (Array.isArray(c.highlights) && c.highlights.length) {
-      card.appendChild(el('ul', { class: 'coach-highlights' },
-        ...c.highlights.map(h => el('li', {}, h))));
-    }
-    const summary = coachChangeSummary(applied);
+    card.appendChild(el('div', { class: 'coach-debrief' }, d.debrief || ''));
+    const summary = coachChangeSummary(applied, rewriteRun, rewriteStr);
     if (summary) {
       card.appendChild(el('div', { class: 'coach-applied' }, summary));
     }

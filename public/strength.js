@@ -263,6 +263,40 @@ const PROGRESSION = {
   },
 };
 
+// --- Catalogo esposto per le sessioni di forza su misura del coach ----------
+/** Elenco compatto degli esercizi disponibili (per far scegliere il coach). */
+export function strengthCatalog() {
+  return Object.entries(CATALOG).map(([key, v]) => ({ key, name: v.name, muscle: v.muscle }));
+}
+
+/** Costruisce un esercizio completo da una chiave del catalogo + parametri. */
+export function exerciseFromKey(key, sets, reps, restSec) {
+  const ex = CATALOG[key];
+  if (!ex) return null;
+  return {
+    key, name: ex.name, icon: ex.icon, muscle: ex.muscle,
+    formTip: ex.formTip, gifUrl: ex.gifUrl,
+    sets: Math.max(1, Math.min(6, Math.round(sets) || 3)),
+    reps: Math.max(1, Math.min(100, Math.round(reps) || 10)),
+    baseReps: Math.max(1, Math.min(100, Math.round(reps) || 10)),
+    restSec: Math.max(15, Math.min(180, Math.round(restSec) || 60)),
+  };
+}
+
+/** Costruisce una sessione di forza su misura da item {exerciseKey,sets,reps,restSec}. */
+export function buildCustomStrengthSession(title, focus, items) {
+  if (!Array.isArray(items) || !items.length) return null;
+  const exercises = items
+    .slice(0, 8)
+    .map(it => exerciseFromKey(it.exerciseKey, it.sets, it.reps, it.restSec))
+    .filter(Boolean);
+  if (!exercises.length) return null;
+  return {
+    id: 'str-custom', title, focus, exercises,
+    estimatedMinutes: estimateMinutes(exercises), custom: true,
+  };
+}
+
 // Mappa livello -> offset di fase
 const LEVEL_OFFSET = { beginner: 0, returning: 1, advanced: 2 };
 

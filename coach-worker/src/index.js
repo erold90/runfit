@@ -36,8 +36,9 @@ Hai pieno controllo della progressione di Daniele: le decisioni le prendi TU, no
 # COSA PUOI MODIFICARE (strumenti)
 Hai questi poteri reali:
 - "apply_change": intensità della FORZA (repScaleDelta) e/o SETTIMANA di corsa/forza (weekDelta).
-- "rewrite_run_session": RISCRIVERE la prossima sessione di CORSA con una struttura su misura (fasi warmup/walk/brisk/jog/run/cooldown a tempo). Usalo quando Daniele vuole una corsa diversa da quella schedulata — es. trasformare una camminata in un run/walk con intervalli di jog per arrivare in Zona 2. Includi SEMPRE warmup iniziale e cooldown finale; rispetta la regola del 10% (durata e carico ragionevoli, niente picchi).
-NON puoi (ancora) riscrivere la struttura fine delle sessioni di FORZA (esercizi/serie): per quelle dai consigli a parole o cambia l'intensità. Usa gli strumenti solo quando una modifica è giustificata da dati o da una richiesta sensata; per dubbi, domande o richieste irragionevoli, consiglia a parole senza usarli. Sii sempre onesto su cosa cambi davvero.
+- "rewrite_run_session": RISCRIVERE la prossima sessione di CORSA con una struttura su misura (fasi warmup/walk/brisk/jog/run/cooldown a tempo). Es. trasformare una camminata in un run/walk con intervalli di jog per arrivare in Zona 2. Includi SEMPRE warmup iniziale e cooldown finale; rispetta la regola del 10%.
+- "rewrite_strength_session": RISCRIVERE la prossima sessione di FORZA scegliendo gli esercizi dal catalogo ("strengthCatalog" nei dati, usa le "key") con serie/ripetizioni/riposo. È a corpo libero: regoli difficoltà con volume e scelta esercizi, mai con i pesi.
+Usa gli strumenti solo quando una modifica è giustificata dai dati o da una richiesta sensata; per dubbi, domande o richieste irragionevoli, consiglia a parole senza usarli. Sii sempre onesto su cosa cambi davvero.
 
 # RIFERIMENTI TEMPORALI
 I dati includono "now" (data e ora attuali di Daniele) e ogni sessione ha un campo "when" già calcolato sul suo fuso orario ("oggi", "ieri", "N giorni fa"). Usa SEMPRE "when" per dire quando ha fatto qualcosa; NON dedurre tu le date dai timestamp "completedAt" (sono in UTC e ti farebbero sbagliare oggi/ieri).
@@ -53,19 +54,13 @@ Se Daniele riferisce dolore al petto, svenimento/capogiro, dispnea sproporzionat
 const SYSTEM_COACH = SYSTEM_BASE + `
 
 # COSA RICEVI
-Nel messaggio utente ricevi un JSON con: la sessione appena conclusa, lo storico (fino a 20 sessioni recenti; le ultime 6 con il dettaglio delle ripetizioni per esercizio), l'andamento del peso (campo "weight": currentKg, startKg, targetKg, deltaTotKg, punti), e la posizione nel programma. Usa SOLO questi dati: non inventare numeri che non vedi.
+Nel messaggio utente ricevi un JSON con: la sessione appena conclusa, lo storico (fino a 20 sessioni; le ultime 6 col dettaglio ripetizioni), l'andamento del peso (campo "weight"), il piano ("plan": cosa tocca, prossima corsa/forza) e il catalogo esercizi forza ("strengthCatalog", per le riscritture). Usa SOLO questi dati: non inventare numeri che non vedi.
 
-# COME DAI IL FEEDBACK (debrief)
-- Confronta SEMPRE con i SUOI dati passati, mai con altre persone: passo a parità di FC, trend dell'RPE su più sessioni, volume in Zona 2, ripetizioni rispetto al target. Sfrutta lo storico esteso per cogliere tendenze, non solo l'ultima seduta.
-- Se c'è il trend peso, collega allenamento e dimagrimento: l'obiettivo è scendere verso il target preservando la massa magra. Nota se il peso si muove (o è fermo) e cosa implica.
-- Struttura: 1 cosa andata bene + 1 dato oggettivo di progresso (o regressione) + 1 focus per la prossima.
-- Onesto e conciso: 4-6 frasi.
-
-# AGGIUSTAMENTI
-Decidi tu l'aggiustamento per la prossima sessione (vedi AUTORITÀ E GIUDIZIO). domain: 'strength', 'run', 'both' o 'none'. Puoi cambiare l'intensità forza (repScaleDelta, tipicamente -0.3..+0.3 a sessione) e la settimana (weekDelta, di norma -1/+1, fino a ±2 sulla forza se chiaramente giustificato). Sulla CORSA resta prudente (regola del 10%, max 1 settimana per volta). Se i dati non giustificano un cambio, action "keep" con delta 0.
-
-# OUTPUT
-Rispondi SEMPRE e SOLO chiamando lo strumento "coach_feedback". Non scrivere testo fuori dallo strumento. flag "medical" se c'è un sintomo di allarme. Sii sempre dalla sua parte.`;
+# DEBRIEF A FINE SESSIONE (è il tuo compito principale qui)
+Fai SEMPRE due cose:
+1) DEBRIEF a parole (4-7 frasi): confronta con i SUOI dati passati (passo a parità di FC, trend RPE su più sessioni, volume Z2, ripetizioni vs target), digli se sta MIGLIORANDO o no con numeri concreti, collega allenamento e peso/dimagrimento. Onesto: se è andata male, dillo.
+2) VALUTA E PREPARA LE PROSSIME SESSIONI: in base a com'è andata, usa gli strumenti per regolare l'intensità/settimana (apply_change) e/o RISCRIVERE la prossima corsa (rewrite_run_session) o forza (rewrite_strength_session) quando ha senso — più volume se è troppo facile, deload/recupero se è troppo dura, struttura diversa se serve (es. run/walk se non arriva in Z2). Se il piano va già bene, NON forzare modifiche: spiega a parole perché tieni la rotta.
+Il testo del debrief lo scrivi normalmente (non in uno strumento); le modifiche le applichi con gli strumenti. Se c'è un sintomo medico di allarme, niente modifiche: scrivi l'avviso e stop.`;
 
 // --- System prompt per la chat libera (/chat) ------------------------------
 const SYSTEM_CHAT = SYSTEM_BASE + `
@@ -77,37 +72,7 @@ Non inventare dati che non vedi: se ti manca un'informazione, chiedila.
 
 PUOI MODIFICARE IL PROGRAMMA ANCHE DA QUI: se Daniele chiede una modifica sensata (o i dati la giustificano), usa lo strumento "apply_change" per applicarla davvero, poi spiega a parole cosa hai cambiato e perché. Se la richiesta è irragionevole o rischiosa (vedi AUTORITÀ E GIUDIZIO), NON usare lo strumento: spiega perché e proponi un'alternativa. Usa lo strumento solo per modifiche concrete al programma, mai per semplici consigli o domande. La sicurezza medica vale sempre: se c'è un sintomo di allarme, niente modifiche, stop e medico.`;
 
-// --- Tool che forza il JSON strutturato di /coach --------------------------
-const COACH_TOOL = {
-  name: 'coach_feedback',
-  description:
-    "Restituisce il debrief del coach e l'aggiustamento proposto per la prossima sessione. È l'unico modo consentito di rispondere.",
-  input_schema: {
-    type: 'object',
-    properties: {
-      debrief: { type: 'string', description: 'Debrief in italiano, 4-6 frasi.' },
-      highlights: {
-        type: 'array', items: { type: 'string' },
-        description: '1-3 punti brevissimi.',
-      },
-      adjustment: {
-        type: 'object',
-        properties: {
-          domain: { type: 'string', enum: ['run', 'strength', 'both', 'none'] },
-          action: { type: 'string', enum: ['keep', 'easier', 'harder', 'deload', 'rest'] },
-          repScaleDelta: { type: 'number', description: 'Variazione intensità forza, tipicamente -0.3..0.3. 0 se nessun cambio.' },
-          weekDelta: { type: 'integer', description: 'Variazione settimana, di norma -1/+1 (fino a ±2 forza). 0 se nessun cambio.' },
-          reason: { type: 'string', description: 'Motivazione breve basata sui dati.' },
-        },
-        required: ['domain', 'action', 'repScaleDelta', 'weekDelta', 'reason'],
-      },
-      flag: { type: 'string', enum: ['none', 'caution', 'medical'] },
-    },
-    required: ['debrief', 'highlights', 'adjustment', 'flag'],
-  },
-};
-
-// --- Tool opzionale per modifiche dalla CHAT -------------------------------
+// --- Tool per modifiche di intensità/settimana ----------------------------
 const CHANGE_TOOL = {
   name: 'apply_change',
   description:
@@ -149,6 +114,35 @@ const REWRITE_RUN_TOOL = {
       },
     },
     required: ['title', 'phases'],
+  },
+};
+
+// --- Tool per RISCRIVERE la prossima sessione di FORZA (a corpo libero) ------
+const REWRITE_STRENGTH_TOOL = {
+  name: 'rewrite_strength_session',
+  description:
+    "Riscrive la PROSSIMA sessione di forza scegliendo gli esercizi dal catalogo (nei dati c'è 'strengthCatalog' con le chiavi disponibili: usa il campo 'key'). È tutto a corpo libero, niente pesi: regoli volume e difficoltà con serie/ripetizioni/riposo e con la scelta degli esercizi. Usalo per personalizzare la forza (focus su un gruppo muscolare, più/meno volume, varianti).",
+  input_schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Titolo breve (es. "Forza su misura — full body").' },
+      focus: { type: 'string', description: 'Focus breve.' },
+      exercises: {
+        type: 'array',
+        description: '2-6 esercizi in ordine, scelti dal catalogo.',
+        items: {
+          type: 'object',
+          properties: {
+            exerciseKey: { type: 'string', description: 'chiave dell\'esercizio dal catalogo (campo "key").' },
+            sets: { type: 'integer', description: 'serie (1-6).' },
+            reps: { type: 'integer', description: 'ripetizioni per serie (1-100).' },
+            restSec: { type: 'integer', description: 'riposo in secondi tra le serie (15-180).' },
+          },
+          required: ['exerciseKey', 'sets', 'reps'],
+        },
+      },
+    },
+    required: ['title', 'exercises'],
   },
 };
 
@@ -215,21 +209,26 @@ function extractText(data) {
 async function handleCoach(env, model, context) {
   const result = await anthropicRequest(env.ANTHROPIC_API_KEY, {
     model,
-    max_tokens: 1024,
+    max_tokens: 1400,
     system: [{ type: 'text', text: SYSTEM_COACH, cache_control: { type: 'ephemeral' } }],
-    tools: [COACH_TOOL],
-    tool_choice: { type: 'tool', name: 'coach_feedback' },
+    tools: [CHANGE_TOOL, REWRITE_RUN_TOOL, REWRITE_STRENGTH_TOOL], // non forzati
     messages: [{
       role: 'user',
       content:
-        'Ecco i miei dati di allenamento. Analizza l\'ultima sessione, confrontala con lo storico e proponi l\'aggiustamento. Dati:\n\n' +
+        'Ho appena concluso una sessione. Analizza com\'è andata (confronto con lo storico, se sto migliorando), dimmelo a parole, POI valuta e prepara le prossime sessioni: aggiusta intensità/settimana e/o riscrivi la prossima corsa o forza se i dati lo giustificano. Dati:\n\n' +
         JSON.stringify(context),
     }],
   });
   if (!result.ok) return { error: result.error };
-  const coach = extractToolInput(result.data, 'coach_feedback');
-  if (!coach) return { error: { detail: 'risposta non interpretabile' } };
-  return { coach, usage: result.data.usage || null };
+  const debrief = extractText(result.data);
+  const change = extractToolInput(result.data, 'apply_change');
+  const rewriteRun = extractToolInput(result.data, 'rewrite_run_session');
+  const rewriteStrength = extractToolInput(result.data, 'rewrite_strength_session');
+  if (!debrief && !(change || rewriteRun || rewriteStrength)) return { error: { detail: 'risposta vuota' } };
+  return {
+    debrief: debrief || 'Sessione registrata. Ho aggiornato il programma.',
+    change, rewriteRun, rewriteStrength, usage: result.data.usage || null,
+  };
 }
 
 // --- Endpoint /chat: conversazione libera ----------------------------------
@@ -244,16 +243,17 @@ async function handleChat(env, model, context, messages) {
     model,
     max_tokens: 800,
     system: [{ type: 'text', text: SYSTEM_CHAT, cache_control: { type: 'ephemeral' } }],
-    tools: [CHANGE_TOOL, REWRITE_RUN_TOOL], // non forzati: usati solo se opportuno
+    tools: [CHANGE_TOOL, REWRITE_RUN_TOOL, REWRITE_STRENGTH_TOOL], // non forzati
     messages: apiMessages,
   });
   if (!result.ok) return { error: result.error };
   let reply = extractText(result.data);
   const change = extractToolInput(result.data, 'apply_change');
   const rewriteRun = extractToolInput(result.data, 'rewrite_run_session');
-  if (!reply && (change || rewriteRun)) reply = 'Fatto, ho aggiornato il programma.';
+  const rewriteStrength = extractToolInput(result.data, 'rewrite_strength_session');
+  if (!reply && (change || rewriteRun || rewriteStrength)) reply = 'Fatto, ho aggiornato il programma.';
   if (!reply) return { error: { detail: 'risposta vuota' } };
-  return { reply, change, rewriteRun, usage: result.data.usage || null };
+  return { reply, change, rewriteRun, rewriteStrength, usage: result.data.usage || null };
 }
 
 // --- Handler ----------------------------------------------------------------
@@ -289,12 +289,12 @@ export default {
       if (!messages.length) return json({ error: 'Campo "messages" mancante' }, 400, cors);
       const r = await handleChat(env, model, context, messages);
       if (r.error) return json({ error: 'Il coach non ha risposto', detail: r.error.detail || '' }, 502, cors);
-      return json({ reply: r.reply, change: r.change || null, rewriteRun: r.rewriteRun || null, usage: r.usage }, 200, cors);
+      return json({ reply: r.reply, change: r.change || null, rewriteRun: r.rewriteRun || null, rewriteStrength: r.rewriteStrength || null, usage: r.usage }, 200, cors);
     }
 
-    // default: /coach
+    // default: /coach (debrief post-sessione: valuta + crea le prossime sessioni)
     const r = await handleCoach(env, model, context);
     if (r.error) return json({ error: 'Il coach non ha risposto', detail: r.error.detail || '' }, 502, cors);
-    return json({ coach: r.coach, usage: r.usage }, 200, cors);
+    return json({ debrief: r.debrief, change: r.change || null, rewriteRun: r.rewriteRun || null, rewriteStrength: r.rewriteStrength || null, usage: r.usage }, 200, cors);
   },
 };
