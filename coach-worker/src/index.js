@@ -33,11 +33,11 @@ Nessun peso, nessun bilanciere: solo esercizi bodyweight dinamici. NON suggerire
 # AUTORITÀ E GIUDIZIO
 Hai pieno controllo della progressione di Daniele: le decisioni le prendi TU, non un algoritmo fisso. Ma sei un COACH, non un esecutore: NON assecondare richieste irragionevoli o rischiose (es. "triplica tutto", "portami a settimana 8 subito", modifiche che ignorano fatica, sonno scarso o un dolore). In quei casi rifiuta con rispetto, spiega il perché e proponi un'alternativa sensata. Le tue modifiche restano graduali e difendibili scientificamente.
 
-# COSA PUOI E NON PUOI MODIFICARE (importante: sii ONESTO)
-Le UNICHE modifiche che puoi APPLICARE davvero con lo strumento sono:
-- Intensità della FORZA (più/meno ripetizioni nelle prossime sessioni di forza).
-- SETTIMANA di corsa o di forza (avanzare/arretrare nel programma). Avanzare la settimana di CORSA sblocca sessioni con più intervalli di corsa/jog — utile se la camminata non basta a portarlo in Zona 2.
-NON puoi riscrivere gli step interni di una singola sessione (durate, alternanza, trasformare una camminata in uno schema run/walk su misura): l'app genera le sessioni da un programma fisso. Quindi NON dire MAI "ho aggiornato il programma" o "ho convertito la sessione" se la richiesta riguarda la struttura di una sessione — sarebbe falso. Per quelle esigenze: (a) dai indicazioni pratiche da seguire DURANTE la sessione (es. autoregolazione run/walk a sensazione sulla FC: cammina, e quando la FC non sale aggiungi 1-2 min di jog lento, poi traccia la sessione come corsa); oppure (b) se è sensato, avanza la settimana di corsa con lo strumento per sbloccare le sessioni con jog. Usa lo strumento SOLO per intensità forza o settimana; per tutto il resto, consiglia a parole. Sii sempre onesto su cosa cambi davvero e cosa no.
+# COSA PUOI MODIFICARE (strumenti)
+Hai questi poteri reali:
+- "apply_change": intensità della FORZA (repScaleDelta) e/o SETTIMANA di corsa/forza (weekDelta).
+- "rewrite_run_session": RISCRIVERE la prossima sessione di CORSA con una struttura su misura (fasi warmup/walk/brisk/jog/run/cooldown a tempo). Usalo quando Daniele vuole una corsa diversa da quella schedulata — es. trasformare una camminata in un run/walk con intervalli di jog per arrivare in Zona 2. Includi SEMPRE warmup iniziale e cooldown finale; rispetta la regola del 10% (durata e carico ragionevoli, niente picchi).
+NON puoi (ancora) riscrivere la struttura fine delle sessioni di FORZA (esercizi/serie): per quelle dai consigli a parole o cambia l'intensità. Usa gli strumenti solo quando una modifica è giustificata da dati o da una richiesta sensata; per dubbi, domande o richieste irragionevoli, consiglia a parole senza usarli. Sii sempre onesto su cosa cambi davvero.
 
 # RIFERIMENTI TEMPORALI
 I dati includono "now" (data e ora attuali di Daniele) e ogni sessione ha un campo "when" già calcolato sul suo fuso orario ("oggi", "ieri", "N giorni fa"). Usa SEMPRE "when" per dire quando ha fatto qualcosa; NON dedurre tu le date dai timestamp "completedAt" (sono in UTC e ti farebbero sbagliare oggi/ieri).
@@ -121,6 +121,34 @@ const CHANGE_TOOL = {
       reason: { type: 'string', description: 'Perché applichi questa modifica (breve).' },
     },
     required: ['domain', 'reason'],
+  },
+};
+
+// --- Tool per RISCRIVERE la prossima sessione di corsa (struttura su misura) ---
+const REWRITE_RUN_TOOL = {
+  name: 'rewrite_run_session',
+  description:
+    "Riscrive la PROSSIMA sessione di corsa con una struttura su misura (es. run/walk personalizzato con intervalli). Le fasi vengono eseguite in ordine, a tempo. Usalo quando Daniele vuole una sessione di corsa diversa da quella schedulata. Includi SEMPRE un warmup all'inizio e un cooldown alla fine. Rispetta la regola del 10% (durata e intensità ragionevoli).",
+  input_schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Titolo breve (es. "Run/walk Zona 2 su misura").' },
+      focus: { type: 'string', description: 'Focus breve (es. "Fat oxidation con intervalli jog").' },
+      phases: {
+        type: 'array',
+        description: 'Fasi in ordine. Primo = warmup, ultimo = cooldown.',
+        items: {
+          type: 'object',
+          properties: {
+            kind: { type: 'string', enum: ['warmup', 'walk', 'brisk', 'jog', 'run', 'cooldown'] },
+            minutes: { type: 'number', description: 'Durata in minuti (decimali ok, es. 1.5).' },
+            cue: { type: 'string', description: 'Istruzione breve per la fase (opzionale).' },
+          },
+          required: ['kind', 'minutes'],
+        },
+      },
+    },
+    required: ['title', 'phases'],
   },
 };
 
@@ -216,15 +244,16 @@ async function handleChat(env, model, context, messages) {
     model,
     max_tokens: 800,
     system: [{ type: 'text', text: SYSTEM_CHAT, cache_control: { type: 'ephemeral' } }],
-    tools: [CHANGE_TOOL], // non forzato: il coach lo usa solo se opportuno
+    tools: [CHANGE_TOOL, REWRITE_RUN_TOOL], // non forzati: usati solo se opportuno
     messages: apiMessages,
   });
   if (!result.ok) return { error: result.error };
   let reply = extractText(result.data);
   const change = extractToolInput(result.data, 'apply_change');
-  if (!reply && change) reply = 'Fatto, ho aggiornato il programma.';
+  const rewriteRun = extractToolInput(result.data, 'rewrite_run_session');
+  if (!reply && (change || rewriteRun)) reply = 'Fatto, ho aggiornato il programma.';
   if (!reply) return { error: { detail: 'risposta vuota' } };
-  return { reply, change, usage: result.data.usage || null };
+  return { reply, change, rewriteRun, usage: result.data.usage || null };
 }
 
 // --- Handler ----------------------------------------------------------------
@@ -260,7 +289,7 @@ export default {
       if (!messages.length) return json({ error: 'Campo "messages" mancante' }, 400, cors);
       const r = await handleChat(env, model, context, messages);
       if (r.error) return json({ error: 'Il coach non ha risposto', detail: r.error.detail || '' }, 502, cors);
-      return json({ reply: r.reply, change: r.change || null, usage: r.usage }, 200, cors);
+      return json({ reply: r.reply, change: r.change || null, rewriteRun: r.rewriteRun || null, usage: r.usage }, 200, cors);
     }
 
     // default: /coach

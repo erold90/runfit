@@ -129,7 +129,8 @@ function renderHome() {
     progress.currentSessionIndex = 0;
     saveProgress(progress);
   }
-  const session = weekSessions[progress.currentSessionIndex];
+  // Sessione di corsa: usa la versione su misura del coach se presente
+  const session = progress.customRunSession || weekSessions[progress.currentSessionIndex];
   const sessions = getSessions();
   const weights = getWeights();
   const profile = getProfile();
@@ -938,6 +939,10 @@ function saveFeedbackAndAdvance(args) {
   };
   saveSession(record);
 
+  // Consuma la sessione di corsa su misura del coach: dopo averla completata si
+  // torna al programma normale.
+  if (progress.customRunSession) progress.customRunSession = null;
+
   // Aggiorna feedback settimanale (per algoritmo adattivo)
   const fb = {
     rpe, completion, avgHr,
@@ -1706,7 +1711,7 @@ function buildCoachContext() {
     const weeklyVolume = progress.weeklyVolume || 3;
     const runSessions = getWeekSessions(progress.currentWeek, weeklyVolume);
     const runIdx = progress.currentSessionIndex || 0;
-    const runS = runSessions[runIdx];
+    const runS = progress.customRunSession || runSessions[runIdx];
     const sIdx = progress.strengthSessionIndex || 0;
     const strS = strengthEnabled
       ? getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx]
@@ -1717,10 +1722,13 @@ function buildCoachContext() {
       todayLabel: plan.label,
       restDays: (settings.restDays || []).map(d => dayNames[d]),
       guided: settings.guidedPlan !== false,
+      customRunActive: !!progress.customRunSession, // c'è già una corsa su misura in coda
       nextRun: runS ? {
         title: runS.title, focus: runS.focus,
         durationMin: Math.round(runS.totalSeconds / 60),
-        letter: ['A', 'B', 'C', 'D', 'E'][runIdx], week: progress.currentWeek,
+        letter: progress.customRunSession ? 'su misura' : (['A', 'B', 'C', 'D', 'E'][runIdx]),
+        week: progress.currentWeek,
+        phases: progress.customRunSession ? runS.phases.map(p => `${p.type} ${Math.round(p.seconds / 60)}min`) : undefined,
       } : null,
       nextStrength: strS ? {
         title: strS.title, focus: strS.focus,
@@ -1800,13 +1808,57 @@ function applyCoachAdjustment(adj, flag) {
   };
 }
 
+/**
+ * Applica una RISCRITTURA della prossima sessione di corsa proposta dal coach.
+ * Valida le fasi e salva una sessione custom in progress.customRunSession (usata
+ * dalla Home/SessionRunner al posto di quella generata; consumata dopo l'uso).
+ * Ritorna la sessione custom o null se non valida.
+ */
+function applyRunRewrite(rw) {
+  if (!rw || !Array.isArray(rw.phases) || !rw.phases.length) return null;
+  const KINDS = ['warmup', 'walk', 'brisk', 'jog', 'run', 'cooldown'];
+  const ZONE = { warmup: 1, cooldown: 1, walk: 1, brisk: 2, jog: 3, run: 4 };
+  const CUE = {
+    warmup: 'Riscaldamento: cammina rilassato. Respira profondo.',
+    cooldown: 'Defaticamento: cammina lentamente. Ottimo lavoro.',
+    walk: 'Cammina rilassato, recupera il respiro.',
+    brisk: 'Passo veloce: cammina come se fossi in ritardo.',
+    jog: 'Corsa leggera: respiro controllato, parla a frasi brevi.',
+    run: 'Corsa sostenuta ma controllata.',
+  };
+  const phases = rw.phases
+    .filter(p => p && KINDS.includes(p.kind) && Number(p.minutes) > 0)
+    .slice(0, 40)
+    .map(p => ({
+      type: p.kind,
+      seconds: Math.min(60 * 60, Math.round(Number(p.minutes) * 60)),
+      targetZone: ZONE[p.kind],
+      cue: (p.cue && String(p.cue).slice(0, 140)) || CUE[p.kind],
+    }));
+  if (!phases.length) return null;
+  const totalSeconds = phases.reduce((s, p) => s + p.seconds, 0);
+  if (totalSeconds < 300 || totalSeconds > 5400) return null; // 5-90 min, anti-assurdità
+  const custom = {
+    id: 'run-custom-' + Date.now(),
+    title: (rw.title || 'Corsa su misura').toString().slice(0, 60),
+    focus: (rw.focus || 'Personalizzata dal coach').toString().slice(0, 60),
+    phases, totalSeconds, custom: true,
+  };
+  const progress = getProgress();
+  progress.customRunSession = custom;
+  saveProgress(progress);
+  return custom;
+}
+
 /** Frase leggibile di cosa ha cambiato il coach (per debrief/chat). */
-function coachChangeSummary(applied) {
-  if (!applied) return null;
+function coachChangeSummary(applied, rewrite) {
   const bits = [];
-  if (applied.repScalePct != null) bits.push(`intensità forza ${applied.repScalePct}%`);
-  if (applied.strengthWeek != null && (applied.domain === 'strength' || applied.domain === 'both')) bits.push(`settimana forza ${applied.strengthWeek}`);
-  if (applied.runWeek != null) bits.push(`settimana corsa ${applied.runWeek}`);
+  if (applied) {
+    if (applied.repScalePct != null) bits.push(`intensità forza ${applied.repScalePct}%`);
+    if (applied.strengthWeek != null && (applied.domain === 'strength' || applied.domain === 'both')) bits.push(`settimana forza ${applied.strengthWeek}`);
+    if (applied.runWeek != null) bits.push(`settimana corsa ${applied.runWeek}`);
+  }
+  if (rewrite) bits.push(`prossima corsa riscritta: "${rewrite.title}" (${Math.round(rewrite.totalSeconds / 60)} min)`);
   return bits.length ? '✓ Aggiornato: ' + bits.join(' · ') : null;
 }
 
@@ -1883,9 +1935,12 @@ async function sendChatMessage(text) {
     });
     const data = await res.json().catch(() => ({}));
     reply = res.ok && data.reply ? data.reply : `⚠️ ${data.error || 'errore'}${data.detail ? ': ' + data.detail : ''}`;
-    // Il coach può decidere di modificare il programma direttamente dalla chat
-    if (res.ok && data.change) {
-      const summary = coachChangeSummary(applyCoachAdjustment(data.change, data.flag));
+    // Il coach può modificare il programma direttamente dalla chat (intensità/
+    // settimana) e/o riscrivere la prossima sessione di corsa
+    if (res.ok && (data.change || data.rewriteRun)) {
+      const applied = data.change ? applyCoachAdjustment(data.change, data.flag) : null;
+      const rewrite = data.rewriteRun ? applyRunRewrite(data.rewriteRun) : null;
+      const summary = coachChangeSummary(applied, rewrite);
       if (summary) reply += '\n\n' + summary;
     }
   } catch {
