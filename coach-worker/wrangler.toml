@@ -16,4 +16,4 @@ workers_dev = true
 [vars]
 # Origin autorizzati a chiamare il proxy (CORS). Aggiungi/rimuovi qui.
 ALLOWED_ORIGINS = "https://erold90.github.io,http://localhost:8000,http://127.0.0.1:8000"
-ANTHROPIC_MODEL = "claude-haiku-4-5"
+ANTHROPIC_MODEL = "claude-sonnet-4-6"

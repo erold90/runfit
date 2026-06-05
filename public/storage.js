@@ -176,18 +176,32 @@ export function coachContext() {
     return `${diff} giorni fa`;
   };
 
-  // Ultime ~8 sessioni con i soli campi utili (l'ultima = quella appena fatta)
-  const recent = sessions.slice(-8).map(s => ({
-    type: s.type, title: s.title, week: s.week, completedAt: s.completedAt,
-    when: relativeDay(s.completedAt), // "oggi" | "ieri" | "N giorni fa"
-    rpe: s.rpe, durationMin: s.durationMin, avgHr: s.avgHr, maxHr: s.maxHr, kcal: s.kcal,
-    km: s.km, paceSecPerKm: s.paceSecPerKm,
-    completedSets: s.completedSets, totalSets: s.totalSets,
-    completedSetsLog: s.type === 'strength' ? s.completedSetsLog : undefined,
-    notes: s.notes || undefined,
-  }));
+  // Ultime ~20 sessioni per i trend; dettaglio ripetizioni solo sulle ultime 6
+  // (il completedSetsLog è pesante: evita di gonfiare i token sulle più vecchie).
+  const slice = sessions.slice(-20);
+  const recent = slice.map((s, i) => {
+    const detailed = i >= slice.length - 6;
+    return {
+      type: s.type, title: s.title, week: s.week, completedAt: s.completedAt,
+      when: relativeDay(s.completedAt), // "oggi" | "ieri" | "N giorni fa"
+      rpe: s.rpe, durationMin: s.durationMin, avgHr: s.avgHr, maxHr: s.maxHr, kcal: s.kcal,
+      km: s.km, paceSecPerKm: s.paceSecPerKm,
+      completedSets: s.completedSets, totalSets: s.totalSets,
+      completedSetsLog: (detailed && s.type === 'strength') ? s.completedSetsLog : undefined,
+      notes: s.notes || undefined,
+    };
+  });
   const lastSession = recent.length ? recent[recent.length - 1] : null;
   const history = recent.slice(0, -1);
+
+  // Andamento peso strutturato (per legare allenamento ↔ dimagrimento)
+  const weightTrend = weights.length ? {
+    currentKg: weights[weights.length - 1].kg,
+    startKg: profile.weightStartKg ?? weights[0].kg,
+    targetKg: profile.weightTargetKg,
+    deltaTotKg: +(weights[weights.length - 1].kg - (profile.weightStartKg ?? weights[0].kg)).toFixed(1),
+    points: weights.slice(-8).map(w => ({ date: w.date, kg: w.kg })),
+  } : null;
 
   return {
     now: now.toLocaleString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }),
@@ -207,7 +221,7 @@ export function coachContext() {
     },
     lastSession,
     history,
-    weights: weights.slice(-6),
+    weight: weightTrend,
   };
 }
 
