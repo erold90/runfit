@@ -320,6 +320,40 @@ const CATALOG = {
     formTip: 'In piedi, scendi con le mani a terra, cammina avanti fino a plank, breve pausa, cammina indietro con le mani e risali. Fluido.',
     gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2022/01/Inchworm.gif',
   },
+
+  // ===== Parco — sbarra e parallele (Daniele ci si allena) =====
+  dips: {
+    name: 'Dip alle parallele',
+    icon: '🔻',
+    muscle: 'Petto basso + tricipiti + spalle',
+    gear: 'Parallele',
+    formTip: 'Alle parallele, braccia tese a sostenerti. Scendi piegando i gomiti fino a spalle all\'altezza dei gomiti, spingi su. Busto leggermente avanti per più petto, dritto per più tricipiti.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Triceps-Dips.gif',
+  },
+  hangingKneeRaise: {
+    name: 'Hanging knee raise',
+    icon: '🪝',
+    muscle: 'Addominali bassi + presa',
+    gear: 'Sbarra',
+    formTip: 'Appeso alla sbarra, braccia tese. Porta le ginocchia verso il petto contraendo gli addominali, scendi controllando senza dondolare. Versione più facile dell\'hanging leg raise.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Hanging-Knee-Raises.gif',
+  },
+  hangingLegRaise: {
+    name: 'Hanging leg raise',
+    icon: '🦵',
+    muscle: 'Addominali + flessori anca + presa',
+    gear: 'Sbarra',
+    formTip: 'Appeso alla sbarra, gambe tese. Sollevale fino all\'orizzontale (o più su) senza slancio, scendi lento. Il gold standard per gli addominali bassi.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/08/Hanging-Leg-Raises.gif',
+  },
+  lSit: {
+    name: 'L-sit',
+    icon: '📐',
+    muscle: 'Core + flessori anca + tricipiti',
+    gear: 'Parallele',
+    formTip: 'Alle parallele, braccia tese, solleva il corpo e tieni le gambe tese in avanti a formare una L. Tieni la posizione (isometrico). Compressione e core intensi.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/09/L-Sit.gif',
+  },
 };
 
 // SCHEMA PROGRESSIONE: 4 fasi (0=base, 3=avanzato)
