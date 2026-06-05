@@ -1694,6 +1694,44 @@ function applyStrengthProgress() {
 // AI COACH — chiamata al Worker, applicazione ibrida, UI debrief
 // ============================================================================
 
+/** Contesto per il coach arricchito col piano del giorno e le prossime sessioni. */
+function buildCoachContext() {
+  const ctx = coachContext();
+  try {
+    const progress = getProgress();
+    const profile = getProfile();
+    const settings = getSettings();
+    const strengthEnabled = profile.strengthEnabled !== false;
+    const plan = getTodayPlan(settings, strengthEnabled);
+    const weeklyVolume = progress.weeklyVolume || 3;
+    const runSessions = getWeekSessions(progress.currentWeek, weeklyVolume);
+    const runIdx = progress.currentSessionIndex || 0;
+    const runS = runSessions[runIdx];
+    const sIdx = progress.strengthSessionIndex || 0;
+    const strS = strengthEnabled
+      ? getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx]
+      : null;
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+    ctx.plan = {
+      todayIs: plan.type,            // 'run' | 'strength' | 'rest'
+      todayLabel: plan.label,
+      restDays: (settings.restDays || []).map(d => dayNames[d]),
+      guided: settings.guidedPlan !== false,
+      nextRun: runS ? {
+        title: runS.title, focus: runS.focus,
+        durationMin: Math.round(runS.totalSeconds / 60),
+        letter: ['A', 'B', 'C', 'D', 'E'][runIdx], week: progress.currentWeek,
+      } : null,
+      nextStrength: strS ? {
+        title: strS.title, focus: strS.focus,
+        session: ['S1', 'S2', 'S3'][sIdx], week: progress.strengthWeek,
+        estimatedMinutes: strS.estimatedMinutes,
+      } : null,
+    };
+  } catch { /* best effort: il piano è un extra */ }
+  return ctx;
+}
+
 /** Chiama il Worker coach. Ritorna {coach}, {skipped} o {error}. Mai lancia. */
 async function fetchCoach() {
   const s = getSettings();
@@ -1706,7 +1744,7 @@ async function fetchCoach() {
         'Content-Type': 'application/json',
         ...(s.coachToken ? { 'X-RunFit-Token': s.coachToken } : {}),
       },
-      body: JSON.stringify({ context: coachContext() }),
+      body: JSON.stringify({ context: buildCoachContext() }),
     });
     if (!res.ok) return { error: `HTTP ${res.status}` };
     const data = await res.json();
@@ -1841,7 +1879,7 @@ async function sendChatMessage(text) {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(s.coachToken ? { 'X-RunFit-Token': s.coachToken } : {}) },
-      body: JSON.stringify({ context: coachContext(), messages: payloadMsgs }),
+      body: JSON.stringify({ context: buildCoachContext(), messages: payloadMsgs }),
     });
     const data = await res.json().catch(() => ({}));
     reply = res.ok && data.reply ? data.reply : `⚠️ ${data.error || 'errore'}${data.detail ? ': ' + data.detail : ''}`;
