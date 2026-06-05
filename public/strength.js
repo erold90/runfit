@@ -173,6 +173,153 @@ const CATALOG = {
     formTip: 'Corri sul posto portando le ginocchia all\'altezza dell\'anca. Cadenza alta.',
     gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/08/High-Knee-Run.gif',
   },
+
+  // ===== Tirata (pull) — colma il buco "solo spinte" =====
+  pullup: {
+    name: 'Trazioni alla sbarra',
+    icon: '🆙',
+    muscle: 'Dorso + bicipiti',
+    gear: 'Sbarra',
+    formTip: 'Presa prona poco più larga delle spalle. Tira il petto verso la sbarra portando i gomiti in basso, scendi controllando fino alle braccia distese.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Pull-up.gif',
+  },
+  chinup: {
+    name: 'Chin-up (presa supina)',
+    icon: '💪',
+    muscle: 'Dorso + bicipiti',
+    gear: 'Sbarra',
+    formTip: 'Presa supina (palmi verso di te) larghezza spalle. Tira fino a mento sopra la sbarra, controlla la discesa. Più bicipiti del pull-up.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/03/Chin-Up.gif',
+  },
+  invertedRow: {
+    name: 'Rematore australiano',
+    icon: '🛶',
+    muscle: 'Dorso + bicipiti + core',
+    gear: 'Tavolo robusto o sbarra bassa',
+    formTip: 'Sotto un tavolo solido (o sbarra bassa), corpo dritto e teso. Tira il petto verso il bordo stringendo le scapole, scendi controllando.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/06/Inverted-Row.gif',
+  },
+  pikePushup: {
+    name: 'Pike push-up (spinta verticale)',
+    icon: '🔺',
+    muscle: 'Spalle + tricipiti',
+    formTip: 'A V rovesciata, bacino alto. Piega i gomiti portando la testa verso il pavimento tra le mani, poi spingi su. Lavora le spalle come una military press.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/06/Pike-Push-up.gif',
+  },
+
+  // ===== Catena posteriore / lombari =====
+  superman: {
+    name: 'Superman',
+    icon: '🦸',
+    muscle: 'Lombari + glutei + dorso basso',
+    formTip: 'Prono, braccia e gambe tese. Solleva insieme petto, braccia e gambe contraendo i lombari, tieni 1 sec, scendi morbido.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Superman-exercise.gif',
+  },
+  nordicCurl: {
+    name: 'Nordic hamstring curl',
+    icon: '🔗',
+    muscle: 'Femorali (eccentrico)',
+    gear: 'Piedi bloccati',
+    formTip: 'In ginocchio, caviglie bloccate sotto un appoggio. Scendi in avanti il più lentamente possibile resistendo coi femorali, spingi con le mani per risalire. Avanzato.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/06/Nordic-Hamstring-Curl.gif',
+  },
+
+  // ===== Gambe — varianti unilaterali e mobilità =====
+  splitSquat: {
+    name: 'Split squat (affondo statico)',
+    icon: '🦵',
+    muscle: 'Quadricipiti + glutei',
+    formTip: 'Posizione di affondo fissa. Scendi dritto col ginocchio posteriore verso terra, risali spingendo col tallone anteriore. Completa le reps, poi cambia gamba.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/05/Split-Squat.gif',
+  },
+  cossackSquat: {
+    name: 'Cossack squat',
+    icon: '🤸',
+    muscle: 'Gambe + adduttori + mobilità',
+    formTip: 'Gambe larghe. Scendi tutto su un lato piegando quel ginocchio mentre l\'altra gamba resta tesa, poi trasla sull\'altro lato. Busto eretto.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/05/Cossack-Squat.gif',
+  },
+  standingCalfRaise: {
+    name: 'Calf raise (polpacci)',
+    icon: '🦶',
+    muscle: 'Polpacci',
+    formTip: 'In piedi, sollevati sulle punte il più in alto possibile, pausa 1 sec in cima, scendi lento. Per più intensità su un gradino o su una gamba sola.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/06/Standing-Calf-Raise.gif',
+  },
+  fireHydrant: {
+    name: 'Fire hydrant',
+    icon: '🐕',
+    muscle: 'Glutei medi + anca',
+    formTip: 'A quattro zampe, solleva lateralmente una gamba piegata a 90° fino all\'altezza dell\'anca senza ruotare il bacino, scendi controllando. Glutei laterali.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Fire-Hydrant.gif',
+  },
+
+  // ===== Core — anti-estensione / anti-rotazione / laterale =====
+  plank: {
+    name: 'Plank',
+    icon: '🧱',
+    muscle: 'Core anti-estensione',
+    formTip: 'Sugli avambracci, corpo in linea retta da testa a talloni. Contrai addome e glutei, niente bacino alto o cedente. Respira.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/plank.gif',
+  },
+  sidePlank: {
+    name: 'Side plank (plank laterale)',
+    icon: '📐',
+    muscle: 'Obliqui + core laterale',
+    formTip: 'Su un avambraccio, corpo dritto di lato, fianco sollevato. Tieni la linea spalla-anca-piede, non far cedere il bacino. Cambia lato.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/05/Side-Bridge.gif',
+  },
+  birdDog: {
+    name: 'Bird-dog',
+    icon: '🐦',
+    muscle: 'Core anti-rotazione + lombari',
+    formTip: 'A quattro zampe, estendi braccio e gamba opposti in linea, fermo 1 sec senza ruotare il bacino, torna e alterna. Lento e controllato.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2022/07/Bird-Dog.gif',
+  },
+  deadBug: {
+    name: 'Dead bug',
+    icon: '🪲',
+    muscle: 'Core profondo',
+    formTip: 'Supino, braccia verso il soffitto e ginocchia a 90°. Abbassa braccio e gamba opposti senza staccare la schiena bassa da terra, torna e alterna.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/05/Dead-Bug.gif',
+  },
+  legRaise: {
+    name: 'Lying leg raise',
+    icon: '🦵',
+    muscle: 'Addominali bassi',
+    formTip: 'Supino, gambe tese unite. Sollevale fino a 90° controllando, scendi senza toccare terra e senza inarcare la schiena. Mani sotto i glutei se serve.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Lying-Leg-Raise.gif',
+  },
+  russianTwist: {
+    name: 'Russian twist',
+    icon: '🌀',
+    muscle: 'Obliqui',
+    formTip: 'Seduto, busto inclinato indietro, piedi sollevati. Ruota il tronco toccando il pavimento a destra e a sinistra. Controllo, non slancio.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Russian-Twist.gif',
+  },
+  bicycleCrunch: {
+    name: 'Bicycle crunch',
+    icon: '🚲',
+    muscle: 'Addominali + obliqui',
+    formTip: 'Supino, pedala portando il gomito al ginocchio opposto ed estendendo l\'altra gamba. Lento e completo, ruota il torace non solo il gomito.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Bicycle-Crunch.gif',
+  },
+
+  // ===== Conditioning aggiuntivo =====
+  jumpingJack: {
+    name: 'Jumping jack',
+    icon: '🤾',
+    muscle: 'Cardio total body',
+    formTip: 'Salta aprendo gambe e braccia sopra la testa, poi richiudi. Ritmo costante, atterra morbido. Ottimo cardio e attivazione.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/05/Jumping-jack.gif',
+  },
+  inchworm: {
+    name: 'Inchworm',
+    icon: '🐛',
+    muscle: 'Total body + mobilità',
+    formTip: 'In piedi, scendi con le mani a terra, cammina avanti fino a plank, breve pausa, cammina indietro con le mani e risali. Fluido.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2022/01/Inchworm.gif',
+  },
 };
 
 // SCHEMA PROGRESSIONE: 4 fasi (0=base, 3=avanzato)
@@ -266,7 +413,10 @@ const PROGRESSION = {
 // --- Catalogo esposto per le sessioni di forza su misura del coach ----------
 /** Elenco compatto degli esercizi disponibili (per far scegliere il coach). */
 export function strengthCatalog() {
-  return Object.entries(CATALOG).map(([key, v]) => ({ key, name: v.name, muscle: v.muscle }));
+  return Object.entries(CATALOG).map(([key, v]) => (
+    v.gear ? { key, name: v.name, muscle: v.muscle, gear: v.gear }
+           : { key, name: v.name, muscle: v.muscle }
+  ));
 }
 
 /** Costruisce un esercizio completo da una chiave del catalogo + parametri. */
