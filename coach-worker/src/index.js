@@ -40,6 +40,9 @@ Hai questi poteri reali:
 - "rewrite_strength_session": RISCRIVERE la prossima sessione di FORZA scegliendo gli esercizi dal catalogo ("strengthCatalog" nei dati, usa le "key") con serie/ripetizioni/riposo. È a corpo libero: regoli difficoltà con volume e scelta esercizi, mai con i pesi.
 Usa gli strumenti solo quando una modifica è giustificata dai dati o da una richiesta sensata; per dubbi, domande o richieste irragionevoli, consiglia a parole senza usarli. Sii sempre onesto su cosa cambi davvero.
 
+# REGOLA D'ORO QUANDO RISCRIVI UNA SESSIONE (importante)
+Quando usi "rewrite_run_session" o "rewrite_strength_session": NON descrivere anche a parole l'intera sessione (le fasi o gli esercizi uno per uno). L'app mostra GIÀ a Daniele la sessione completa che generi con lo strumento. Quindi: scrivi al massimo UNA frase di introduzione, chiama lo strumento (è lì che metti i dettagli) e chiudi con UNA frase. Non scrivere mai cliffhanger tipo "ora costruisco le sessioni, partiamo:" e poi elencarle a mano: i dettagli vanno SOLO dentro lo strumento, altrimenti rischi di restare a metà. Sii compatto.
+
 # RIFERIMENTI TEMPORALI
 I dati includono "now" (data e ora attuali di Daniele) e ogni sessione ha un campo "when" già calcolato sul suo fuso orario ("oggi", "ieri", "N giorni fa"). Usa SEMPRE "when" per dire quando ha fatto qualcosa; NON dedurre tu le date dai timestamp "completedAt" (sono in UTC e ti farebbero sbagliare oggi/ieri).
 
@@ -70,7 +73,10 @@ Stai conversando con Daniele fuori dall'allenamento. Nel primo messaggio trovi i
 Se chiede "posso allenarmi oggi?", valuta la readiness (RPE recenti, recupero, stanchezza/sonno che riferisce) e dai una risposta netta con la motivazione.
 Non inventare dati che non vedi: se ti manca un'informazione, chiedila.
 
-PUOI MODIFICARE IL PROGRAMMA ANCHE DA QUI: se Daniele chiede una modifica sensata (o i dati la giustificano), usa lo strumento "apply_change" per applicarla davvero, poi spiega a parole cosa hai cambiato e perché. Se la richiesta è irragionevole o rischiosa (vedi AUTORITÀ E GIUDIZIO), NON usare lo strumento: spiega perché e proponi un'alternativa. Usa lo strumento solo per modifiche concrete al programma, mai per semplici consigli o domande. La sicurezza medica vale sempre: se c'è un sintomo di allarme, niente modifiche, stop e medico.`;
+PUOI MODIFICARE IL PROGRAMMA ANCHE DA QUI: se Daniele chiede una modifica sensata (o i dati la giustificano), usa lo strumento "apply_change" per cambiare intensità/settimana, oppure "rewrite_run_session"/"rewrite_strength_session" per riscrivere la prossima corsa o forza. Applica davvero la modifica con lo strumento, poi spiega in poche parole cosa hai cambiato e perché. Se la richiesta è irragionevole o rischiosa (vedi AUTORITÀ E GIUDIZIO), NON usare lo strumento: spiega perché e proponi un'alternativa. Usa lo strumento solo per modifiche concrete al programma, mai per semplici consigli o domande. La sicurezza medica vale sempre: se c'è un sintomo di allarme, niente modifiche, stop e medico.
+
+# BREVITÀ IN CHAT (vincolante)
+Anche se Daniele ti chiede una valutazione completa E di programmare le prossime sessioni, resta COMPATTO: massimo ~8-10 righe di testo totali. Evita i titoli markdown lunghi e gli elenchi prolissi. Se devi creare le sessioni, falle con gli strumenti (non descriverle a parole) e limita il testo a un breve commento. Meglio una risposta corta e completa che una lunga troncata a metà.`;
 
 // --- Tool per modifiche di intensità/settimana ----------------------------
 const CHANGE_TOOL = {
@@ -209,7 +215,7 @@ function extractText(data) {
 async function handleCoach(env, model, context) {
   const result = await anthropicRequest(env.ANTHROPIC_API_KEY, {
     model,
-    max_tokens: 1400,
+    max_tokens: 2200,
     system: [{ type: 'text', text: SYSTEM_COACH, cache_control: { type: 'ephemeral' } }],
     tools: [CHANGE_TOOL, REWRITE_RUN_TOOL, REWRITE_STRENGTH_TOOL], // non forzati
     messages: [{
@@ -227,7 +233,9 @@ async function handleCoach(env, model, context) {
   if (!debrief && !(change || rewriteRun || rewriteStrength)) return { error: { detail: 'risposta vuota' } };
   return {
     debrief: debrief || 'Sessione registrata. Ho aggiornato il programma.',
-    change, rewriteRun, rewriteStrength, usage: result.data.usage || null,
+    change, rewriteRun, rewriteStrength,
+    truncated: result.data.stop_reason === 'max_tokens',
+    usage: result.data.usage || null,
   };
 }
 
@@ -241,7 +249,7 @@ async function handleChat(env, model, context, messages) {
   ];
   const result = await anthropicRequest(env.ANTHROPIC_API_KEY, {
     model,
-    max_tokens: 800,
+    max_tokens: 2000,
     system: [{ type: 'text', text: SYSTEM_CHAT, cache_control: { type: 'ephemeral' } }],
     tools: [CHANGE_TOOL, REWRITE_RUN_TOOL, REWRITE_STRENGTH_TOOL], // non forzati
     messages: apiMessages,
@@ -253,7 +261,11 @@ async function handleChat(env, model, context, messages) {
   const rewriteStrength = extractToolInput(result.data, 'rewrite_strength_session');
   if (!reply && (change || rewriteRun || rewriteStrength)) reply = 'Fatto, ho aggiornato il programma.';
   if (!reply) return { error: { detail: 'risposta vuota' } };
-  return { reply, change, rewriteRun, rewriteStrength, usage: result.data.usage || null };
+  return {
+    reply, change, rewriteRun, rewriteStrength,
+    truncated: result.data.stop_reason === 'max_tokens',
+    usage: result.data.usage || null,
+  };
 }
 
 // --- Handler ----------------------------------------------------------------
@@ -289,12 +301,12 @@ export default {
       if (!messages.length) return json({ error: 'Campo "messages" mancante' }, 400, cors);
       const r = await handleChat(env, model, context, messages);
       if (r.error) return json({ error: 'Il coach non ha risposto', detail: r.error.detail || '' }, 502, cors);
-      return json({ reply: r.reply, change: r.change || null, rewriteRun: r.rewriteRun || null, rewriteStrength: r.rewriteStrength || null, usage: r.usage }, 200, cors);
+      return json({ reply: r.reply, change: r.change || null, rewriteRun: r.rewriteRun || null, rewriteStrength: r.rewriteStrength || null, truncated: !!r.truncated, usage: r.usage }, 200, cors);
     }
 
     // default: /coach (debrief post-sessione: valuta + crea le prossime sessioni)
     const r = await handleCoach(env, model, context);
     if (r.error) return json({ error: 'Il coach non ha risposto', detail: r.error.detail || '' }, 502, cors);
-    return json({ debrief: r.debrief, change: r.change || null, rewriteRun: r.rewriteRun || null, rewriteStrength: r.rewriteStrength || null, usage: r.usage }, 200, cors);
+    return json({ debrief: r.debrief, change: r.change || null, rewriteRun: r.rewriteRun || null, rewriteStrength: r.rewriteStrength || null, truncated: !!r.truncated, usage: r.usage }, 200, cors);
   },
 };

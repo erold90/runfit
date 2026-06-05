@@ -929,7 +929,15 @@ body.session-active .view { padding-top: calc(8px + var(--safe-top)); }
 .coach-flag-caution { background: rgba(245,158,11,0.16); color: #f59e0b; }
 .coach-flag-medical { background: rgba(239,68,68,0.18); color: #ef4444; }
 .coach-medical { border-color: rgba(239,68,68,0.5); }
-.coach-debrief { font-size: 0.95rem; line-height: 1.5; color: var(--text); }
+.coach-debrief { font-size: 0.95rem; line-height: 1.5; color: var(--text); white-space: pre-wrap; }
+.coach-session-detail {
+  margin-top: 10px; padding: 10px 12px;
+  background: rgba(56,189,248,0.08);
+  border: 1px solid rgba(56,189,248,0.22);
+  border-radius: 10px;
+  font-size: 0.88rem; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap;
+}
 .coach-highlights {
   margin: 10px 0 0; padding-left: 18px;
   color: var(--text-muted); font-size: 0.88rem;

@@ -1892,6 +1892,30 @@ function coachChangeSummary(applied, rewriteRun, rewriteStr) {
   return bits.length ? '✓ Aggiornato: ' + bits.join(' · ') : null;
 }
 
+const PHASE_LABEL = {
+  warmup: 'Riscaldamento', cooldown: 'Defaticamento', walk: 'Cammina',
+  brisk: 'Cammino veloce', jog: 'Jog', run: 'Corsa',
+};
+
+/**
+ * Testo leggibile (multiriga) della/e sessione/i create dal coach, così Daniele
+ * le VEDE in chat o nel debrief invece di un semplice "✓ Aggiornato".
+ */
+function rewriteDetailText(rewriteRun, rewriteStr) {
+  const blocks = [];
+  if (rewriteRun && Array.isArray(rewriteRun.phases)) {
+    const phs = rewriteRun.phases
+      .map(p => `• ${PHASE_LABEL[p.type] || p.type} — ${Math.round(p.seconds / 60)} min`).join('\n');
+    blocks.push(`🏃 ${rewriteRun.title}\n${phs}`);
+  }
+  if (rewriteStr && Array.isArray(rewriteStr.exercises)) {
+    const exs = rewriteStr.exercises
+      .map(e => `• ${e.name} — ${e.sets}×${e.reps}`).join('\n');
+    blocks.push(`💪 ${rewriteStr.title}\n${exs}`);
+  }
+  return blocks.length ? blocks.join('\n\n') : null;
+}
+
 function flagBadge(flag) {
   if (flag === 'medical') return el('span', { class: 'coach-flag coach-flag-medical' }, '⚠️ Attenzione medica');
   if (flag === 'caution') return el('span', { class: 'coach-flag coach-flag-caution' }, '⏸ Cautela');
@@ -1973,6 +1997,11 @@ async function sendChatMessage(text) {
       const rewriteStr = data.rewriteStrength ? applyStrengthRewrite(data.rewriteStrength) : null;
       const summary = coachChangeSummary(applied, rewriteRun, rewriteStr);
       if (summary) reply += '\n\n' + summary;
+      const detail = rewriteDetailText(rewriteRun, rewriteStr);
+      if (detail) reply += '\n\n' + detail;
+    } else if (res.ok && data.truncated) {
+      // Risposta interrotta dal limite di token senza che i tool partissero
+      reply += '\n\n⚠️ Risposta interrotta. Chiedimi una cosa per volta (es. solo la forza) e te la preparo per intero.';
     }
   } catch {
     reply = '⚠️ Coach non raggiungibile (sei offline?).';
@@ -2036,6 +2065,10 @@ function mountCoachDebrief() {
     const summary = coachChangeSummary(applied, rewriteRun, rewriteStr);
     if (summary) {
       card.appendChild(el('div', { class: 'coach-applied' }, summary));
+    }
+    const detail = rewriteDetailText(rewriteRun, rewriteStr);
+    if (detail) {
+      card.appendChild(el('div', { class: 'coach-session-detail' }, detail));
     }
   });
 }
