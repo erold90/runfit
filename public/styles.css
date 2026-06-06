@@ -429,6 +429,27 @@ body.session-strength .btn-control.btn-strength {
   border-radius: 99px;
   font-size: 0.9rem;
 }
+/* Indicatore del lato (esercizi unilaterali: bulgarian, split squat…) */
+.strength-side {
+  margin: 4px 0 2px;
+  display: inline-block;
+  padding: 7px 16px;
+  border-radius: 99px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--purple);
+  background: rgba(139,92,246,0.18);
+  border: 1px solid rgba(139,92,246,0.4);
+}
+.strength-side-switch {
+  color: var(--warn);
+  background: rgba(245,158,11,0.18);
+  border-color: rgba(245,158,11,0.5);
+  animation: sidePulse 0.9s ease-in-out infinite;
+}
+@keyframes sidePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+
 .strength-form-tip {
   margin-top: 10px;
   padding: 10px 12px;

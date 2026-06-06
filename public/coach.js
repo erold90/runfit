@@ -137,7 +137,9 @@ export class StrengthRunner extends EventTarget {
     this.session = session;
     this.exerciseIndex = 0;
     this.setIndex = 0;          // 0..sets-1
-    this.completedSets = [];    // log delle serie complete: { exercise, set, reps, rpe }
+    this.completedSets = [];    // log per serie/lato: { exerciseKey, setNumber, side, targetReps, actualReps }
+    this.setsCompleted = 0;     // serie COMPLETE (per gli unilaterali = entrambi i lati) → usato per il progresso
+    this.side = 0;              // 0 = primo lato, 1 = secondo lato (solo esercizi unilaterali)
     this.state = 'setActive';   // 'setActive' | 'restActive' | 'done'
     this.restRemaining = 0;
     this.restTimer = null;
@@ -146,7 +148,9 @@ export class StrengthRunner extends EventTarget {
 
   get currentExercise() { return this.session.exercises[this.exerciseIndex]; }
   get totalSets() { return this.session.exercises.reduce((s, e) => s + e.sets, 0); }
-  get completedCount() { return this.completedSets.length; }
+  get completedCount() { return this.setsCompleted; }
+  get isUnilateral() { const e = this.currentExercise; return !!(e && e.unilateral); }
+  get sideLabel() { return this.side === 0 ? 'Lato sinistro' : 'Lato destro'; }
   get progressPct() { return (this.completedCount / this.totalSets) * 100; }
   get totalDurationSec() { return Math.round((Date.now() - this.startedAt) / 1000); }
 
@@ -154,16 +158,35 @@ export class StrengthRunner extends EventTarget {
   setDone(actualReps) {
     if (this.state !== 'setActive') return;
     const ex = this.currentExercise;
+    const reps = actualReps == null ? ex.reps : actualReps;
+
+    // Log della serie (separato per lato negli esercizi unilaterali)
     this.completedSets.push({
       exerciseKey: ex.key,
       exerciseName: ex.name,
       setNumber: this.setIndex + 1,
+      side: ex.unilateral ? (this.side === 0 ? 'sx' : 'dx') : null,
       targetReps: ex.reps,
-      actualReps: actualReps == null ? ex.reps : actualReps,
+      actualReps: reps,
     });
+
+    // Unilaterale, primo lato appena fatto → passa al secondo lato con un breve switch
+    if (ex.unilateral && this.side === 0) {
+      this.side = 1;
+      this.dispatchEvent(new CustomEvent('setComplete', {
+        detail: { exercise: ex, setNumber: this.setIndex + 1, completedCount: this.completedCount, sideSwitch: true },
+      }));
+      this._startRest(Math.min(20, ex.restSec), false, true);
+      return;
+    }
+
+    // Serie COMPLETA (bilaterale, oppure secondo lato di un unilaterale)
+    this.side = 0;
+    this.setsCompleted++;
     this.dispatchEvent(new CustomEvent('setComplete', {
       detail: { exercise: ex, setNumber: this.setIndex + 1, completedCount: this.completedCount },
     }));
+
     // Ultima serie dell'ultimo esercizio? finito
     const isLastSetOfExercise = this.setIndex + 1 >= ex.sets;
     const isLastExercise = this.exerciseIndex + 1 >= this.session.exercises.length;
@@ -202,18 +225,22 @@ export class StrengthRunner extends EventTarget {
     speechSynthesis.cancel();
   }
 
-  _startRest(secs, isExerciseChange) {
+  _startRest(secs, isExerciseChange, switchSide = false) {
     this.state = 'restActive';
     this.restRemaining = secs;
     fxPhaseChange();
-    vibrate([100, 50, 100]);
-    if (isExerciseChange) {
+    vibrate(switchSide ? [200, 80, 200] : [100, 50, 100]);
+    if (switchSide) {
+      speak(`Cambia lato! ${secs} secondi e parti col ${this.sideLabel.toLowerCase()}.`);
+    } else if (isExerciseChange) {
       const next = this.currentExercise;
-      speak(`Riposo ${secs} secondi. Prossimo: ${next.name}, ${next.sets} serie da ${next.reps} ripetizioni.`);
+      const perSide = next.unilateral ? ' per lato' : '';
+      speak(`Riposo ${secs} secondi. Prossimo: ${next.name}, ${next.sets} serie da ${next.reps} ripetizioni${perSide}.`);
     } else {
-      speak(`Riposo ${secs} secondi. Serie ${this.setIndex + 1} di ${this.currentExercise.sets} in arrivo.`);
+      const perSide = this.currentExercise.unilateral ? ' per lato' : '';
+      speak(`Riposo ${secs} secondi. Serie ${this.setIndex + 1} di ${this.currentExercise.sets} in arrivo${perSide}.`);
     }
-    this.dispatchEvent(new CustomEvent('restStart', { detail: { seconds: secs } }));
+    this.dispatchEvent(new CustomEvent('restStart', { detail: { seconds: secs, switchSide } }));
     acquireWakeLock();
     this.restTimer = setInterval(() => {
       this.restRemaining--;
@@ -233,9 +260,17 @@ export class StrengthRunner extends EventTarget {
     const ex = this.currentExercise;
     fxPhaseChange();
     vibrate([150]);
-    speak(`Vai! Serie ${this.setIndex + 1}.`);
+    if (ex.unilateral) {
+      speak(`Vai! ${this.sideLabel}, ${ex.reps} ripetizioni.`);
+    } else {
+      speak(`Vai! Serie ${this.setIndex + 1}.`);
+    }
     this.dispatchEvent(new CustomEvent('setStart', {
-      detail: { exercise: ex, setNumber: this.setIndex + 1 },
+      detail: {
+        exercise: ex, setNumber: this.setIndex + 1,
+        side: ex.unilateral ? this.side : null,
+        sideLabel: ex.unilateral ? this.sideLabel : null,
+      },
     }));
   }
 }

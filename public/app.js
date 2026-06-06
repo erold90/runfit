@@ -1461,6 +1461,9 @@ function renderStrengthScreen(session) {
   const bigCounter = el('div', { class: 'strength-big-counter' }, `${session.exercises[0].reps}`);
   const counterLabel = el('div', { class: 'strength-counter-label' }, 'ripetizioni');
   const setNumberEl = el('div', { class: 'strength-set-info' }, `Serie 1 / ${session.exercises[0].sets}`);
+  // Indicatore del lato per gli esercizi unilaterali (bulgarian, split squat, ponte monopodalico…)
+  const sideEl = el('div', { class: 'strength-side' }, 'Lato sinistro');
+  if (!session.exercises[0].unilateral) sideEl.style.display = 'none';
 
   const restDisplay = el('div', { class: 'strength-rest-display' });
   restDisplay.style.display = 'none';
@@ -1508,6 +1511,7 @@ function renderStrengthScreen(session) {
       gifEl,
       bigCounter, counterLabel,
       setNumberEl,
+      sideEl,
       formTipEl,
       restDisplay,
     ),
@@ -1532,8 +1536,19 @@ function renderStrengthScreen(session) {
   currentStrength.addEventListener('restStart', e => {
     mainBtn.textContent = '⏭ Salta riposo';
     restDisplay.style.display = 'block';
-    restDisplay.textContent = `Riposo: ${e.detail.seconds}s`;
     repInput.style.display = 'none';
+    // Cambio lato: stesso esercizio/serie, secondo lato in arrivo
+    if (e.detail.switchSide) {
+      restDisplay.textContent = `Cambia lato: ${e.detail.seconds}s`;
+      phaseLabel.textContent = 'Cambia lato!';
+      counterLabel.textContent = 'prossimo lato';
+      sideEl.style.display = '';
+      sideEl.textContent = currentStrength.sideLabel; // "Lato destro"
+      sideEl.classList.add('strength-side-switch');
+      bigCounter.textContent = `${currentStrength.currentExercise.reps}`;
+      return;
+    }
+    restDisplay.textContent = `Riposo: ${e.detail.seconds}s`;
     // Anticipa il PROSSIMO esercizio/serie durante il riposo (era fermo su quello finito)
     const nx = currentStrength.currentExercise;
     const nextSet = currentStrength.setIndex + 1;
@@ -1544,6 +1559,8 @@ function renderStrengthScreen(session) {
     bigCounter.textContent = `${nx.reps}`;
     counterLabel.textContent = 'prossime ripetizioni';
     setNumberEl.textContent = `Serie ${nextSet} / ${nx.sets}`;
+    if (nx.unilateral) { sideEl.style.display = ''; sideEl.textContent = 'Lato sinistro'; sideEl.classList.remove('strength-side-switch'); }
+    else { sideEl.style.display = 'none'; }
     if (nx.gifUrl) { gifEl.src = nx.gifUrl; gifEl.alt = nx.name; gifEl.style.display = ''; }
     else { gifEl.style.display = 'none'; }
   });
@@ -1562,6 +1579,13 @@ function renderStrengthScreen(session) {
     bigCounter.textContent = `${ex.reps}`;
     counterLabel.textContent = 'ripetizioni';
     setNumberEl.textContent = `Serie ${e.detail.setNumber} / ${ex.sets}`;
+    if (e.detail.sideLabel) {
+      sideEl.style.display = '';
+      sideEl.textContent = e.detail.sideLabel;
+      sideEl.classList.remove('strength-side-switch');
+    } else {
+      sideEl.style.display = 'none';
+    }
     repInput.setAttribute('placeholder', `${ex.reps}`);
     // Aggiorna GIF dimostrativa
     if (ex.gifUrl) {
@@ -1592,7 +1616,7 @@ function showStrengthFeedbackForm(session, interrupted = false) {
   const container = $('#view-workout');
   container.innerHTML = '';
 
-  const completedSets = currentStrength.completedSets.length;
+  const completedSets = currentStrength.completedCount;
   const totalSets = currentStrength.totalSets;
   const completion = completedSets / totalSets;
   const durationSec = currentStrength.totalDurationSec;
@@ -2330,7 +2354,7 @@ function showSessionEditor(s) {
               refreshRatio();
             });
             return el('div', { class: 'reps-edit-cell' },
-              el('span', { class: 'reps-edit-set' }, `S${entry.setNumber}`),
+              el('span', { class: 'reps-edit-set' }, entry.side ? `S${entry.setNumber} ${entry.side}` : `S${entry.setNumber}`),
               inp,
               el('span', { class: 'reps-edit-target' }, `/ ${entry.targetReps}`),
             );
