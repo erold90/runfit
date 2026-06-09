@@ -301,6 +301,23 @@ export class SessionRunner extends EventTarget {
     this.outAndBack = !!opts.outAndBack;
     this.turnaroundSec = this.outAndBack ? this._computeTurnaroundSec() : null;
     this.turnaroundFired = false;
+    // Microcue vocali del coach (arrivano async dopo lo start): distribuiti
+    // in modo discreto nella sessione, mai sopra i cambi fase.
+    this.cues = [];
+    this.cueTimes = [];
+    this.cueIdx = 0;
+  }
+
+  // Imposta i cue e calcola gli istanti di consegna (distribuiti nel tempo).
+  setCues(cues) {
+    this.cues = Array.isArray(cues) ? cues.filter(c => typeof c === 'string' && c.trim()).slice(0, 6) : [];
+    const n = this.cues.length;
+    const T = this.session.totalSeconds;
+    this.cueTimes = [];
+    for (let i = 0; i < n; i++) this.cueTimes.push(Math.round(T * (i + 1) / (n + 1)));
+    // Salta gli istanti già passati (se i cue arrivano a corsa avviata)
+    const next = this.cueTimes.findIndex(t => t > this.totalElapsed);
+    this.cueIdx = next < 0 ? n : next;
   }
 
   // Istante (secondi dall'inizio) in cui la distanza percorsa = metà del totale,
@@ -403,6 +420,14 @@ export class SessionRunner extends EventTarget {
       vibrate([300, 120, 300, 120, 300]);
       speak('Metà percorso. Torna indietro adesso: inverti la rotta verso casa.');
       this.dispatchEvent(new CustomEvent('turnaround', { detail: { atSec: this.totalElapsed } }));
+    }
+
+    // Microcue del coach: consegna discreta, lontano dai cambi fase (>8s)
+    if (this.cueIdx < this.cues.length && this.totalElapsed >= this.cueTimes[this.cueIdx]
+        && this.phaseElapsed > 8 && remaining > 8) {
+      speak(this.cues[this.cueIdx]);
+      this.dispatchEvent(new CustomEvent('cue', { detail: { text: this.cues[this.cueIdx] } }));
+      this.cueIdx++;
     }
 
     if (remaining <= 0) {

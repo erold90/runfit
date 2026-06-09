@@ -158,6 +158,36 @@ const REWRITE_STRENGTH_TOOL = {
   },
 };
 
+// --- Tool per i microcue vocali durante la corsa ---------------------------
+const RUNNING_CUES_TOOL = {
+  name: 'running_cues',
+  description: 'Restituisce i microcue vocali da dire a Daniele durante la corsa di oggi.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      cues: {
+        type: 'array',
+        description: '3-5 frasi brevi (max ~12 parole), in italiano, da pronunciare ad alta voce durante la corsa.',
+        items: { type: 'string' },
+      },
+    },
+    required: ['cues'],
+  },
+};
+
+// --- System prompt per i cue corsa -----------------------------------------
+const SYSTEM_CUES = SYSTEM_BASE + `
+
+# MODALITÀ CUE CORSA
+Genera da 3 a 5 MICROCUE vocali che l'app pronuncerà a Daniele mentre corre OGGI, distribuiti nella sessione.
+Regole:
+- Ogni cue: max ~12 parole, italiano, diretto, motivante ma non melenso, pronunciabile ad alta voce.
+- Su misura sui suoi dati (assessment, storico, peso) e sulle fasi della corsa di oggi (plan.nextRun.phases).
+- NON citare la frequenza cardiaca in tempo reale: NON ha sensori. Per l'intensità usa il TALK TEST (se riesce a parlare a frasi intere è in Zona 2) e l'RPE.
+- Copri un mix tra: disciplina Zona 2 / talk test, cadenza (170-180 passi/min), postura e respiro, pacing (parti piano, chiudi forte), una chiusura motivante.
+- Niente numeri di fase, orari o "cue 1/2/3": solo il contenuto da dire.
+Rispondi SOLO con lo strumento running_cues.`;
+
 // --- CORS ------------------------------------------------------------------
 function corsHeaders(origin, allowed) {
   const list = (allowed || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -274,6 +304,25 @@ async function handleChat(env, model, context, messages) {
   };
 }
 
+// --- Endpoint /cues: microcue vocali per la corsa (output strutturato) ------
+async function handleCues(env, model, context) {
+  const result = await anthropicRequest(env.ANTHROPIC_API_KEY, {
+    model,
+    max_tokens: 500,
+    system: [{ type: 'text', text: SYSTEM_CUES, cache_control: { type: 'ephemeral' } }],
+    tools: [RUNNING_CUES_TOOL],
+    tool_choice: { type: 'tool', name: 'running_cues' },
+    messages: [{ role: 'user', content: 'Genera i microcue per la corsa di oggi. Dati:\n\n' + JSON.stringify(context) }],
+  });
+  if (!result.ok) return { error: result.error };
+  const input = extractToolInput(result.data, 'running_cues');
+  const cues = input && Array.isArray(input.cues)
+    ? input.cues.filter(c => typeof c === 'string' && c.trim()).map(c => c.trim()).slice(0, 6)
+    : [];
+  if (!cues.length) return { error: { detail: 'nessun cue' } };
+  return { cues, usage: result.data.usage || null };
+}
+
 // --- Handler ----------------------------------------------------------------
 export default {
   async fetch(request, env) {
@@ -308,6 +357,12 @@ export default {
       const r = await handleChat(env, model, context, messages);
       if (r.error) return json({ error: 'Il coach non ha risposto', detail: r.error.detail || '' }, 502, cors);
       return json({ reply: r.reply, change: r.change || null, rewriteRun: r.rewriteRun || null, rewriteStrength: r.rewriteStrength || null, truncated: !!r.truncated, usage: r.usage }, 200, cors);
+    }
+
+    if (path.endsWith('/cues')) {
+      const r = await handleCues(env, model, context);
+      if (r.error) return json({ error: 'Nessun cue', detail: r.error.detail || '' }, 502, cors);
+      return json({ cues: r.cues, usage: r.usage }, 200, cors);
     }
 
     // default: /coach (debrief post-sessione: valuta + crea le prossime sessioni)

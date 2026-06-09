@@ -658,6 +658,13 @@ function startSession(session) {
   currentRunner = new SessionRunner(session, { outAndBack: getSettings().outAndBack === true });
   renderActiveSession(session);
   currentRunner.start();
+  // Cue vocali su misura dal coach (async, non blocca la partenza)
+  if (getSettings().coachEnabled === true) {
+    const runnerRef = currentRunner;
+    fetchRunCues().then(cues => {
+      if (cues && cues.length && currentRunner === runnerRef) currentRunner.setCues(cues);
+    });
+  }
 }
 
 function renderActiveSession(session) {
@@ -1900,6 +1907,25 @@ function buildCoachContext() {
     ctx.strengthCatalog = strengthCatalog();
   } catch { /* best effort: il piano è un extra */ }
   return ctx;
+}
+
+/** Chiede al Worker i microcue vocali per la corsa. Ritorna array di stringhe o null. Mai lancia. */
+async function fetchRunCues() {
+  const s = getSettings();
+  if (!s.coachEnabled || !s.coachUrl) return null;
+  try {
+    const url = s.coachUrl.replace(/\/+$/, '') + '/cues';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(s.coachToken ? { 'X-RunFit-Token': s.coachToken } : {}) },
+      body: JSON.stringify({ context: buildCoachContext() }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => ({}));
+    return Array.isArray(data.cues) && data.cues.length ? data.cues : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Chiama il Worker coach (debrief). Ritorna {data}, {skipped} o {error}. Mai lancia. */
