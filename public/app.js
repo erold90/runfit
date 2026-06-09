@@ -408,7 +408,11 @@ function buildTodayCard(progress, profile, runSession, sessionsToday = []) {
   // --- CASO 3: forza da fare ---
   if (plan.type === 'strength') {
     const sIdx = progress.strengthSessionIndex || 0;
-    const sSession = getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx];
+    const customStr = progress.customStrengthSession;
+    // Onora la sessione su misura del coach, come fa la corsa (riga ~134) e il
+    // coach stesso (buildCoachContext): così card, anteprima e coach concordano.
+    const sSession = customStr || getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx];
+    const sessLabel = customStr ? 'su misura' : ['S1', 'S2', 'S3'][sIdx];
     return el('div', { class: 'card today-card today-strength' },
       el('div', { class: 'today-head' },
         el('span', { class: 'today-icon' }, '💪'),
@@ -417,7 +421,14 @@ function buildTodayCard(progress, profile, runSession, sessionsToday = []) {
           el('div', { class: 'today-title' }, sSession.title),
         ),
       ),
-      el('div', { class: 'today-desc' }, `~${sSession.estimatedMinutes} min · ${sSession.focus} · ${['S1', 'S2', 'S3'][sIdx]}`),
+      el('div', { class: 'today-desc' }, `~${sSession.estimatedMinutes} min · ${sSession.focus} · ${sessLabel}`),
+      customStr ? el('div', { class: 'today-custom-note' },
+        el('span', {}, '🤖 Sessione su misura creata dal coach'),
+        el('button', { class: 'btn btn-ghost btn-sm', onclick: () => {
+          const pr = getProgress(); pr.customStrengthSession = null; saveProgress(pr);
+          renderHome(); toast('Tornato alla sessione standard del programma');
+        } }, 'Usa la standard'),
+      ) : null,
       el('div', { class: 'card-actions' },
         el('button', { class: 'btn btn-strength', onclick: () => startStrengthSession(sSession) }, 'Inizia forza'),
         el('button', { class: 'btn btn-ghost', onclick: () => showStrengthPreview(sSession) }, 'Anteprima'),
