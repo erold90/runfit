@@ -642,6 +642,20 @@ body.session-strength .btn-control.btn-strength {
 .stat-block { text-align: left; }
 .stat-big { font-size: 2rem; font-weight: 800; margin: 6px 0 4px; letter-spacing: -0.02em; color: var(--text); }
 
+/* Toggle Corsa | Forza nelle Stats */
+.stats-toggle {
+  display: flex; gap: 6px; padding: 5px;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 16px;
+}
+.stats-toggle-btn {
+  flex: 1; padding: 9px 12px; border: none; cursor: pointer;
+  background: transparent; color: var(--text-muted);
+  font-size: 0.92rem; font-weight: 700; border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.stats-toggle-btn.active { background: var(--bg-elev-2); color: var(--text); }
+
 /* --- Weight card --- */
 .weight-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px; }
 .weight-current { font-size: 2rem; font-weight: 700; }
@@ -837,6 +851,30 @@ body.session-strength .btn-control.btn-strength {
   font-size: 0.85rem;
   margin-bottom: 8px;
   padding: 8px;
+}
+/* Banner "torna indietro" (modalità andata/ritorno) */
+.turn-banner {
+  margin: 10px auto;
+  max-width: 90%;
+  text-align: center;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(245,158,11,0.45);
+  animation: turnPulse 1s ease-in-out infinite;
+}
+@keyframes turnPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+.preview-turn-hint {
+  margin: 4px 0 12px;
+  padding: 9px 12px;
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: var(--text);
 }
 
 .total-progress {

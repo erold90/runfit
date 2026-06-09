@@ -280,8 +280,12 @@ export class StrengthRunner extends EventTarget {
  * Runner per una sessione di allenamento.
  * Emette eventi: 'tick', 'phaseStart', 'phaseEnd', 'pause', 'resume', 'finish'
  */
+// Velocità RELATIVE per tipo di fase (camminata = 1). Servono solo a stimare
+// la distanza: il punto di metà-percorso è invariante rispetto alla scala.
+const PHASE_SPEED = { warmup: 0.95, walk: 1.0, brisk: 1.4, jog: 1.9, run: 2.3, cooldown: 0.8, rest: 0 };
+
 export class SessionRunner extends EventTarget {
-  constructor(session) {
+  constructor(session, opts = {}) {
     super();
     this.session = session;
     this.phaseIndex = 0;
@@ -292,6 +296,31 @@ export class SessionRunner extends EventTarget {
     this.startedAt = null;
     this.pausedAt = null;
     this.totalPausedMs = 0;
+    // Modalità andata/ritorno: avvisa quando hai percorso METÀ della distanza
+    // stimata, così tornando indietro finisci dove sei partito.
+    this.outAndBack = !!opts.outAndBack;
+    this.turnaroundSec = this.outAndBack ? this._computeTurnaroundSec() : null;
+    this.turnaroundFired = false;
+  }
+
+  // Istante (secondi dall'inizio) in cui la distanza percorsa = metà del totale,
+  // pesando ogni fase per la sua velocità relativa. Gestisce fasi asimmetriche
+  // (es. defaticamento 7' lento vs riscaldamento 5') e velocità diverse.
+  _computeTurnaroundSec() {
+    const phases = this.session.phases || [];
+    let total = 0;
+    for (const p of phases) total += p.seconds * (PHASE_SPEED[p.type] ?? 1);
+    if (total <= 0) return null;
+    const half = total / 2;
+    let acc = 0, elapsed = 0;
+    for (const p of phases) {
+      const w = PHASE_SPEED[p.type] ?? 1;
+      for (let s = 0; s < p.seconds; s++) {
+        acc += w; elapsed++;
+        if (acc >= half) return elapsed;
+      }
+    }
+    return Math.round(this.session.totalSeconds / 2);
   }
 
   get currentPhase() { return this.session.phases[this.phaseIndex]; }
@@ -366,6 +395,15 @@ export class SessionRunner extends EventTarget {
         progressPct: this.progressPct,
       },
     }));
+
+    // Andata/ritorno: metà distanza raggiunta → "torna indietro"
+    if (this.outAndBack && !this.turnaroundFired && this.turnaroundSec && this.totalElapsed >= this.turnaroundSec) {
+      this.turnaroundFired = true;
+      fxPhaseChange();
+      vibrate([300, 120, 300, 120, 300]);
+      speak('Metà percorso. Torna indietro adesso: inverti la rotta verso casa.');
+      this.dispatchEvent(new CustomEvent('turnaround', { detail: { atSec: this.totalElapsed } }));
+    }
 
     if (remaining <= 0) {
       this.dispatchEvent(new CustomEvent('phaseEnd', { detail: { phase: this.currentPhase } }));

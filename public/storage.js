@@ -71,6 +71,7 @@ const defaultSettings = {
   voice: '',               // Nome voce sintesi (default it-IT)
   restDays: [0],           // Giorni di riposo (0=Dom,1=Lun,...6=Sab). Default: domenica
   guidedPlan: true,        // Mostra la card "Oggi" che alterna corsa/forza/riposo
+  outAndBack: false,       // Corsa andata/ritorno: avvisa a metà distanza di tornare indietro
   // AI Coach (opzionale) — proxy Worker, vedi coach-worker/
   coachEnabled: false,     // off di default
   coachUrl: '',            // URL del Worker coach (es. https://runfit-coach.<acct>.workers.dev)

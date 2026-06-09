@@ -67,6 +67,7 @@ const fmtDateShort = iso => {
 let currentRunner = null;
 let currentStrength = null;
 let currentView = 'home';
+let statsMode = 'run';   // Stats: 'run' (corsa) | 'strength' (forza)
 
 // --- Profile helpers -------------------------------------------------------
 function getAge() {
@@ -569,6 +570,11 @@ function showSessionPreview(session) {
     ),
     el('div', { class: 'modal-body' },
       el('div', { class: 'session-focus' }, session.focus),
+      (getSettings().outAndBack === true ? (() => {
+        const t = new SessionRunner(session, { outAndBack: true }).turnaroundSec;
+        return t ? el('div', { class: 'preview-turn-hint' },
+          `🔄 Andata/ritorno attivo: ti avviserò a ~${fmtTime(t)} di invertire, così finisci dove sei partito.`) : null;
+      })() : null),
       el('div', { class: 'phases-list' },
         ...session.phases.map((p, i) => el('div', { class: `phase-item phase-${p.type}` },
           el('div', { class: 'phase-num' }, String(i + 1)),
@@ -604,7 +610,7 @@ function startSession(session) {
   document.body.classList.add('session-active');
   // Sblocca audio (richiesto da iOS dopo gesto utente)
   speak('Pronti?');
-  currentRunner = new SessionRunner(session);
+  currentRunner = new SessionRunner(session, { outAndBack: getSettings().outAndBack === true });
   renderActiveSession(session);
   currentRunner.start();
 }
@@ -637,6 +643,10 @@ function renderActiveSession(session) {
   const zoneInfo = el('div', { class: 'zone-info' });
   updateZoneInfo(zoneInfo, session.phases[0].type);
 
+  // Banner "torna indietro" (modalità andata/ritorno)
+  const turnBanner = el('div', { class: 'turn-banner' }, '🔄 Torna indietro — verso casa');
+  turnBanner.style.display = 'none';
+
   // Controlli — pulsante Pausa centrale grande, laterali più piccoli
   const btnPause = el('button', { class: 'btn btn-primary btn-control' }, '⏸ Pausa');
   const btnSkip = el('button', { class: 'btn btn-ghost btn-control', onclick: () => currentRunner.skipPhase() }, '⏭');
@@ -659,6 +669,7 @@ function renderActiveSession(session) {
       phaseCue,
       zoneInfo,
     ),
+    turnBanner,
     nextPhase,
     totalProgress,
     totalInfo,
@@ -695,6 +706,12 @@ function renderActiveSession(session) {
       ? `Dopo: ${phaseTypeLabel(nxt.type)} · ${fmtTime(nxt.seconds)}`
       : 'Ultima fase!';
     updateZoneInfo(zoneInfo, phase.type);
+  });
+
+  currentRunner.addEventListener('turnaround', () => {
+    turnBanner.style.display = '';
+    toast('🔄 Metà percorso: torna indietro verso casa');
+    setTimeout(() => { turnBanner.style.display = 'none'; }, 15000);
   });
 
   currentRunner.addEventListener('finish', () => {
@@ -2525,8 +2542,8 @@ function renderStatsInsight(sessions, weights, profile) {
     }
   }
 
-  // FC media sulle uscite con cardio. Giù = cuore più efficiente.
-  const th = halfTrend(sessions.filter(s => s.avgHr).map(s => s.avgHr));
+  // FC media sulle CORSE con cardio (non la forza). Giù = cuore più efficiente.
+  const th = halfTrend(sessions.filter(s => s.type === 'run' && s.avgHr).map(s => s.avgHr));
   if (th && Math.abs(th.delta) >= 1) {
     signals.push({ key: 'hr', label: 'FC media',
       value: (th.delta < 0 ? '−' : '+') + Math.abs(Math.round(th.delta)) + ' bpm',
@@ -2598,22 +2615,20 @@ function renderStats() {
 
   const profile = getProfile();
   const weights = getWeights();
+  const runSessions = sessions.filter(s => s.type !== 'strength');
+  const strSessions = sessions.filter(s => s.type === 'strength');
 
   container.appendChild(el('h2', { class: 'view-title' }, 'Statistiche & Progressione'));
 
-  // 1) VERDETTO in cima
+  // 1) VERDETTO in cima (panoramica generale)
   container.appendChild(renderStatsInsight(sessions, weights, profile));
 
-  // 2) KPI sintetici (icone SVG, non emoji)
-  const totalSec = sessions.reduce((s, x) => s + x.durationSec, 0);
-  const totalKcal = sessions.reduce((s, x) => s + (x.kcal || 0), 0);
-  const totalKm = sessions.reduce((s, x) => s + (x.km || 0), 0);
-  const avgRpe = (sessions.reduce((s, x) => s + x.rpe, 0) / sessions.length).toFixed(1);
-  container.appendChild(el('div', { class: 'kpi-grid' },
-    statKpi('Tempo totale', fmtMinutes(totalSec), 'clock'),
-    statKpi('Calorie', totalKcal.toLocaleString('it-IT'), 'flame'),
-    statKpi('Distanza', `${totalKm.toFixed(1)} km`, 'ruler'),
-    statKpi('RPE medio', avgRpe, 'gauge'),
+  // 2) TOGGLE Corsa | Forza — i numeri di corsa e forza non vanno mischiati
+  container.appendChild(el('div', { class: 'stats-toggle' },
+    el('button', { class: 'stats-toggle-btn' + (statsMode === 'run' ? ' active' : ''),
+      onclick: () => { statsMode = 'run'; renderStats(); } }, '🏃 Corsa'),
+    el('button', { class: 'stats-toggle-btn' + (statsMode === 'strength' ? ' active' : ''),
+      onclick: () => { statsMode = 'strength'; renderStats(); } }, '💪 Forza'),
   ));
 
   // Helper: card con canvas (drawCharts() la popola per id)
@@ -2623,88 +2638,113 @@ function renderStats() {
     el('canvas', { id: canvasId, height: '200' }),
   );
 
-  // 3) PESO (promosso: è l'obiettivo)
-  if (weights.length > 1) {
-    container.appendChild(chartCard('Andamento peso', 'chart-weight'));
-  } else if (weights.length === 1) {
-    container.appendChild(bigStat('Peso', `${weights[0].kg.toFixed(1)} kg`,
-      `Target ${profile.weightTargetKg} kg. Registra il peso più volte per vedere il trend.`));
+  const modeSessions = statsMode === 'strength' ? strSessions : runSessions;
+  if (!modeSessions.length) {
+    container.appendChild(el('div', { class: 'card' }, el('div', { class: 'chart-hint' },
+      statsMode === 'strength' ? 'Nessuna sessione di forza registrata ancora.' : 'Nessuna corsa registrata ancora.')));
+    requestAnimationFrame(() => drawCharts(sessions, statsMode));
+    return;
   }
 
-  // 4) ZONA 2 (il KPI per dimagrire, promosso)
-  const z2Sessions = sessions.filter(s => s.timeInZoneSec?.z2);
-  const byWeekZ2 = {};
-  z2Sessions.forEach(s => { byWeekZ2[s.week] = (byWeekZ2[s.week] || 0) + s.timeInZoneSec.z2 / 60; });
-  const z2Weeks = Object.keys(byWeekZ2);
-  if (z2Weeks.length >= 2) {
-    container.appendChild(chartCard('Volume Zona 2 per settimana (min)', 'chart-z2',
+  if (statsMode === 'run') {
+    // KPI corsa
+    const runSec = runSessions.reduce((s, x) => s + (x.durationSec || 0), 0);
+    const totalKm = runSessions.reduce((s, x) => s + (x.km || 0), 0);
+    const paceVals = runSessions.filter(s => s.paceSecPerKm).map(s => s.paceSecPerKm);
+    const avgPace = paceVals.length ? Math.round(paceVals.reduce((a, b) => a + b, 0) / paceVals.length) : null;
+    const hrVals = runSessions.filter(s => s.avgHr).map(s => s.avgHr);
+    const avgHr = hrVals.length ? Math.round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) : null;
+    container.appendChild(el('div', { class: 'kpi-grid' },
+      statKpi('Tempo corsa', fmtMinutes(runSec), 'clock'),
+      statKpi('Distanza', `${totalKm.toFixed(1)} km`, 'ruler'),
+      statKpi('Passo medio', avgPace ? fmtPace(avgPace) : '—', 'gauge'),
+      statKpi('FC media', avgHr ? `${avgHr} bpm` : '—', 'heart'),
+    ));
+
+    // Peso (obiettivo, generale)
+    if (weights.length > 1) container.appendChild(chartCard('Andamento peso', 'chart-weight'));
+    else if (weights.length === 1) container.appendChild(bigStat('Peso', `${weights[0].kg.toFixed(1)} kg`,
+      `Target ${profile.weightTargetKg} kg. Registra il peso più volte per il trend.`));
+
+    // Zona 2 (solo corse)
+    const byWeekZ2 = {};
+    runSessions.filter(s => s.timeInZoneSec?.z2).forEach(s => { byWeekZ2[s.week] = (byWeekZ2[s.week] || 0) + s.timeInZoneSec.z2 / 60; });
+    const z2Weeks = Object.keys(byWeekZ2);
+    if (z2Weeks.length >= 2) container.appendChild(chartCard('Volume Zona 2 per settimana (min)', 'chart-z2',
       'Tempo nella zona 110-128 bpm: la zona regina per bruciare grasso.'));
-  } else if (z2Weeks.length === 1) {
-    container.appendChild(bigStat('Zona 2 questa settimana', `${Math.round(byWeekZ2[z2Weeks[0]])} min`,
-      'Minuti nella zona brucia-grassi (110-128 bpm). Il confronto settimanale arriva con la prossima settimana.'));
-  }
+    else if (z2Weeks.length === 1) container.appendChild(bigStat('Zona 2 questa settimana', `${Math.round(byWeekZ2[z2Weeks[0]])} min`,
+      'Minuti nella zona brucia-grassi (110-128 bpm). Il confronto arriva la prossima settimana.'));
 
-  // 5) VOLUME settimanale
-  const byWeekMin = {};
-  sessions.forEach(s => { byWeekMin[s.week] = (byWeekMin[s.week] || 0) + (s.durationMin || 0); });
-  const weekKeys = Object.keys(byWeekMin).sort((a, b) => a - b);
-  if (weekKeys.length >= 2) {
-    container.appendChild(chartCard('Volume settimanale (minuti)', 'chart-volume'));
-  } else if (weekKeys.length === 1) {
-    container.appendChild(bigStat(`Volume settimana ${weekKeys[0]}`, `${Math.round(byWeekMin[weekKeys[0]])} min`,
-      'Minuti totali allenati. La prossima settimana si affiancherà per il confronto.'));
-  }
+    // Volume corsa settimanale
+    const byWeekMin = {};
+    runSessions.forEach(s => { byWeekMin[s.week] = (byWeekMin[s.week] || 0) + (s.durationMin || 0); });
+    const weekKeys = Object.keys(byWeekMin);
+    if (weekKeys.length >= 2) container.appendChild(chartCard('Volume corsa settimanale (min)', 'chart-volume'));
+    else if (weekKeys.length === 1) container.appendChild(bigStat(`Corsa settimana ${weekKeys[0]}`, `${Math.round(byWeekMin[weekKeys[0]])} min`,
+      'Minuti corsi. La prossima settimana si affiancherà per il confronto.'));
 
-  // 6) PASSO medio
-  const paceCount = sessions.filter(s => s.paceSecPerKm).length;
-  if (paceCount >= 3) {
-    container.appendChild(chartCard('Passo medio (min/km)', 'chart-pace',
+    // Passo
+    const paceCount = paceVals.length;
+    if (paceCount >= 3) container.appendChild(chartCard('Passo medio (min/km)', 'chart-pace',
       'La linea che scende vuol dire che stai diventando più veloce.'));
-  } else if (paceCount >= 1) {
-    const last = [...sessions].reverse().find(s => s.paceSecPerKm);
-    container.appendChild(bigStat('Passo (ultima corsa)', fmtPace(last.paceSecPerKm) + '/km',
-      'Servono almeno 3 corse per vedere il trend del passo.'));
-  }
+    else if (paceCount >= 1) container.appendChild(bigStat('Passo (ultima corsa)', fmtPace([...runSessions].reverse().find(s => s.paceSecPerKm).paceSecPerKm) + '/km',
+      'Servono almeno 3 corse per il trend del passo.'));
 
-  // 7) FC media
-  const hrCount = sessions.filter(s => s.avgHr).length;
-  if (hrCount >= 3) {
-    container.appendChild(chartCard('Frequenza cardiaca media', 'chart-hr',
+    // FC media (solo corse)
+    if (hrVals.length >= 3) container.appendChild(chartCard('Frequenza cardiaca media (corsa)', 'chart-hr',
       'A parità di passo, una FC più bassa significa cuore più efficiente.'));
-  } else if (hrCount >= 1) {
-    const last = [...sessions].reverse().find(s => s.avgHr);
-    container.appendChild(bigStat('FC media (ultima corsa)', `${last.avgHr} bpm`,
+    else if (hrVals.length >= 1) container.appendChild(bigStat('FC media (ultima corsa)', `${[...runSessions].reverse().find(s => s.avgHr).avgHr} bpm`,
       'Servono almeno 3 corse per il trend cardiaco.'));
-  }
 
-  // 8) RPE — grafico solo se varia e ci sono abbastanza dati; altrimenti stat
-  const rpes = sessions.map(s => s.rpe);
-  const rpeConstant = rpes.every(r => r === rpes[0]);
-  if (sessions.length >= 3 && !rpeConstant) {
-    container.appendChild(chartCard('RPE per sessione', 'chart-rpe',
-      'Sforzo percepito 1-10. Stabile = carico ben gestito.'));
-  } else {
-    container.appendChild(bigStat('RPE per sessione',
-      rpeConstant ? `Costante a ${rpes[0]}` : `Media ${avgRpe}`,
-      rpeConstant ? 'Sforzo percepito identico ogni volta: ottima regolarità.' : 'Sforzo percepito 1-10 sulle tue sessioni.'));
-  }
-
-  // 9) CADENZA
-  const cadCount = sessions.filter(s => s.cadence).length;
-  if (cadCount >= 3) {
-    container.appendChild(chartCard('Cadenza media (passi/min)', 'chart-cad',
+    // Cadenza
+    const cadCount = runSessions.filter(s => s.cadence).length;
+    if (cadCount >= 3) container.appendChild(chartCard('Cadenza media (passi/min)', 'chart-cad',
       'Target 170-180 spm per ridurre l\'impatto al ginocchio.'));
-  } else if (cadCount >= 1) {
-    const last = [...sessions].reverse().find(s => s.cadence);
-    container.appendChild(bigStat('Cadenza (ultima corsa)', `${last.cadence} spm`,
+    else if (cadCount >= 1) container.appendChild(bigStat('Cadenza (ultima corsa)', `${[...runSessions].reverse().find(s => s.cadence).cadence} spm`,
       'Target 170-180 spm. Servono 3 corse per il trend.'));
+  } else {
+    // ===== FORZA =====
+    const strSec = strSessions.reduce((s, x) => s + (x.durationSec || 0), 0);
+    const totSets = strSessions.reduce((s, x) => s + (x.completedSets || x.totalSets || 0), 0);
+    const rpeVals = strSessions.map(s => s.rpe).filter(Boolean);
+    const avgRpeStr = rpeVals.length ? (rpeVals.reduce((a, b) => a + b, 0) / rpeVals.length).toFixed(1) : '—';
+    container.appendChild(el('div', { class: 'kpi-grid' },
+      statKpi('Sessioni forza', String(strSessions.length), 'clock'),
+      statKpi('Serie totali', String(totSets), 'gauge'),
+      statKpi('RPE medio', avgRpeStr, 'flame'),
+      statKpi('Durata media', strSessions.length ? `${Math.round(strSec / 60 / strSessions.length)} min` : '—', 'clock'),
+    ));
+
+    // Volume forza settimanale (min)
+    const byWeekStr = {};
+    strSessions.forEach(s => { byWeekStr[s.week] = (byWeekStr[s.week] || 0) + (s.durationMin || 0); });
+    const strWeeks = Object.keys(byWeekStr);
+    if (strWeeks.length >= 2) container.appendChild(chartCard('Volume forza settimanale (min)', 'chart-str-volume'));
+    else if (strWeeks.length === 1) container.appendChild(bigStat(`Forza settimana ${strWeeks[0]}`, `${Math.round(byWeekStr[strWeeks[0]])} min`,
+      'Minuti di forza. Il confronto settimanale arriva con la prossima settimana.'));
+
+    // RPE forza
+    if (strSessions.length >= 3) container.appendChild(chartCard('RPE per sessione (forza)', 'chart-str-rpe',
+      'Sforzo percepito 1-10. Stabile = carico ben gestito.'));
+    else container.appendChild(bigStat('RPE forza', rpeVals.length ? `Media ${avgRpeStr}` : '—',
+      'Servono almeno 3 sessioni di forza per il trend.'));
+
+    // Ripetizioni vs target (% media per sessione)
+    const ratioSessions = strSessions.filter(s => Array.isArray(s.completedSetsLog) && s.completedSetsLog.length);
+    if (ratioSessions.length >= 2) container.appendChild(chartCard('Ripetizioni vs target (%)', 'chart-str-ratio',
+      '100% = hai centrato il target. Sopra = stai superando il programma.'));
+    else if (ratioSessions.length === 1) {
+      const r = sessionRepRatio(ratioSessions[0].completedSetsLog);
+      container.appendChild(bigStat('Ripetizioni vs target', r != null ? `${Math.round(r * 100)}%` : '—',
+        'Quanto superi il target di ripetizioni. Il trend arriva con più sessioni.'));
+    }
   }
 
   // Disegna i grafici delle card effettivamente presenti
-  requestAnimationFrame(() => drawCharts(sessions));
+  requestAnimationFrame(() => drawCharts(sessions, statsMode));
 }
 
-function drawCharts(sessions) {
+function drawCharts(sessions, mode = 'run') {
   if (typeof Chart === 'undefined') {
     console.warn('Chart.js non caricato');
     return;
@@ -2716,11 +2756,50 @@ function drawCharts(sessions) {
   Chart.defaults.color = text;
   Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
 
-  // Volume settimanale
+  // Corsa e forza separate: ogni grafico usa solo le sessioni della sua modalità
+  const runSessions = sessions.filter(s => s.type !== 'strength');
+  const strSessions = sessions.filter(s => s.type === 'strength');
+
+  // ===== Grafici FORZA =====
+  const ctxStrVol = $('#chart-str-volume')?.getContext('2d');
+  if (ctxStrVol) {
+    const byWeek = {};
+    strSessions.forEach(s => { byWeek[s.week] = (byWeek[s.week] || 0) + (s.durationMin || 0); });
+    const labels = Object.keys(byWeek).sort((a, b) => a - b);
+    new Chart(ctxStrVol, {
+      type: 'bar',
+      data: { labels: labels.map(w => `Sett. ${w}`), datasets: [{ label: 'min forza', data: labels.map(w => Math.round(byWeek[w])), backgroundColor: '#8b5cf6cc', borderRadius: 6 }] },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    });
+  }
+  const ctxStrRpe = $('#chart-str-rpe')?.getContext('2d');
+  if (ctxStrRpe) {
+    new Chart(ctxStrRpe, {
+      type: 'line',
+      data: { labels: strSessions.map(s => fmtDateShort(s.completedAt)), datasets: [{ label: 'RPE', data: strSessions.map(s => s.rpe), borderColor: '#f59e0b', backgroundColor: '#f59e0b22', tension: 0.3, fill: true, pointRadius: 4 }] },
+      options: { plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 10 } } },
+    });
+  }
+  const ctxStrRatio = $('#chart-str-ratio')?.getContext('2d');
+  if (ctxStrRatio) {
+    const withRatio = strSessions.filter(s => Array.isArray(s.completedSetsLog) && s.completedSetsLog.length);
+    new Chart(ctxStrRatio, {
+      type: 'line',
+      data: {
+        labels: withRatio.map(s => fmtDateShort(s.completedAt)),
+        datasets: [
+          { label: '% del target', data: withRatio.map(s => Math.round((sessionRepRatio(s.completedSetsLog) || 1) * 100)), borderColor: accent, backgroundColor: accent + '22', tension: 0.3, fill: true, pointRadius: 4 },
+          { label: 'Target 100%', data: withRatio.map(() => 100), borderColor: muted, borderDash: [6, 4], pointRadius: 0, fill: false },
+        ],
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    });
+  }
+
+  // ===== Grafici CORSA (solo sessioni di corsa) =====
+  // Volume corsa settimanale
   const byWeek = {};
-  sessions.forEach(s => {
-    byWeek[s.week] = (byWeek[s.week] || 0) + s.durationMin;
-  });
+  runSessions.forEach(s => { byWeek[s.week] = (byWeek[s.week] || 0) + s.durationMin; });
   const weekLabels = Object.keys(byWeek).sort((a, b) => a - b);
   const ctx1 = $('#chart-volume')?.getContext('2d');
   if (ctx1) {
@@ -2739,29 +2818,10 @@ function drawCharts(sessions) {
     });
   }
 
-  // RPE
-  const ctx2 = $('#chart-rpe')?.getContext('2d');
-  if (ctx2) {
-    new Chart(ctx2, {
-      type: 'line',
-      data: {
-        labels: sessions.map(s => fmtDateShort(s.completedAt)),
-        datasets: [{
-          label: 'RPE',
-          data: sessions.map(s => s.rpe),
-          borderColor: '#f59e0b',
-          backgroundColor: '#f59e0b22',
-          tension: 0.3, fill: true, pointRadius: 4,
-        }],
-      },
-      options: { plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 10 } } },
-    });
-  }
-
-  // FC
+  // FC (solo corse)
   const ctx3 = $('#chart-hr')?.getContext('2d');
   if (ctx3) {
-    const withHr = sessions.filter(s => s.avgHr);
+    const withHr = runSessions.filter(s => s.avgHr);
     new Chart(ctx3, {
       type: 'line',
       data: {
@@ -2781,7 +2841,7 @@ function drawCharts(sessions) {
   // Pace (in min/km, asse Y in min decimali per leggibilità)
   const ctxPace = $('#chart-pace')?.getContext('2d');
   if (ctxPace) {
-    const withPace = sessions.filter(s => s.paceSecPerKm);
+    const withPace = runSessions.filter(s => s.paceSecPerKm);
     new Chart(ctxPace, {
       type: 'line',
       data: {
@@ -2803,11 +2863,11 @@ function drawCharts(sessions) {
     });
   }
 
-  // Volume Zone 2 (somma minuti Z2 per settimana di programma)
+  // Volume Zone 2 (solo corse)
   const ctxZ2 = $('#chart-z2')?.getContext('2d');
   if (ctxZ2) {
     const byWeekZ2 = {};
-    sessions.filter(s => s.timeInZoneSec?.z2).forEach(s => {
+    runSessions.filter(s => s.timeInZoneSec?.z2).forEach(s => {
       byWeekZ2[s.week] = (byWeekZ2[s.week] || 0) + (s.timeInZoneSec.z2 / 60);
     });
     const z2Labels = Object.keys(byWeekZ2).sort((a, b) => a - b);
@@ -2826,10 +2886,10 @@ function drawCharts(sessions) {
     });
   }
 
-  // Cadenza
+  // Cadenza (solo corse)
   const ctxCad = $('#chart-cad')?.getContext('2d');
   if (ctxCad) {
-    const withCad = sessions.filter(s => s.cadence);
+    const withCad = runSessions.filter(s => s.cadence);
     new Chart(ctxCad, {
       type: 'line',
       data: {
@@ -2961,6 +3021,8 @@ function renderProfile() {
     el('div', { class: 'help-text' }, 'Tocca i giorni in cui vuoi RIPOSARE (evidenziati in rosso). Negli altri giorni l\'app alterna automaticamente corsa e forza, partendo dalla corsa.'),
     restDaysSelector(settings),
     el('div', { class: 'help-text' }, planSummaryText(settings, profile)),
+    toggleField('Corsa andata/ritorno (avviso "torna indietro")', settings.outAndBack === true, v => updateSettings({ outAndBack: v })),
+    el('div', { class: 'help-text' }, 'Se attivo: durante la corsa, raggiunta metà della distanza stimata, la voce ti dice di tornare indietro così finisci dove sei partito. Tiene conto di fasi e velocità diverse (riscaldamento, jog, defaticamento).'),
   ));
 
   // Coach AI (opzionale)
