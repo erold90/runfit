@@ -1814,13 +1814,17 @@ function buildCoachContext() {
         durationMin: Math.round(runS.totalSeconds / 60),
         letter: progress.customRunSession ? 'su misura' : (['A', 'B', 'C', 'D', 'E'][runIdx]),
         week: progress.currentWeek,
-        phases: progress.customRunSession ? runS.phases.map(p => `${p.type} ${Math.round(p.seconds / 60)}min`) : undefined,
+        // Fasi REALI della sessione che partirà (custom o standard): mai inventare
+        phases: Array.isArray(runS.phases)
+          ? runS.phases.map(p => `${p.type} ${Math.round(p.seconds / 60)}min`) : undefined,
       } : null,
       nextStrength: strS ? {
         title: strS.title, focus: strS.focus,
         session: progress.customStrengthSession ? 'su misura' : ['S1', 'S2', 'S3'][sIdx],
         week: progress.strengthWeek, estimatedMinutes: strS.estimatedMinutes,
-        exercises: progress.customStrengthSession ? strS.exercises.map(e => `${e.name} ${e.sets}x${e.reps}`) : undefined,
+        // Esercizi REALI della sessione che partirà (custom o standard): mai inventare
+        exercises: Array.isArray(strS.exercises)
+          ? strS.exercises.map(e => `${e.name} ${e.sets}×${e.reps}${e.unilateral ? ' per lato' : ''}`) : undefined,
       } : null,
     };
     // Catalogo esercizi forza disponibili (per le riscritture del coach)
