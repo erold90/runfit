@@ -1122,6 +1122,15 @@ body.coach-active .tabbar { display: none; }
 .today-done-list { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
 .today-done-line { display: flex; align-items: center; gap: 8px; font-size: 0.92rem; color: var(--text); }
 .today-done-ic { font-size: 1.1rem; }
+.today-next {
+  margin: 4px 0 4px; padding: 12px 14px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.today-next-label { font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.today-next-title { font-size: 1.02rem; font-weight: 700; margin: 4px 0 2px; }
+.today-next-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; }
 .today-more { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
 .today-more-label { font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px; }
 .rpe-row {

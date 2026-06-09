@@ -345,6 +345,48 @@ function getTodayPlan(settings, strengthEnabled) {
   return { type: idx % 2 === 0 ? 'run' : 'strength', dow, label };
 }
 
+// Prossimo giorno di ALLENAMENTO (salta i riposi), a partire da domani.
+// Stessa logica di alternanza di getTodayPlan, ma proiettata in avanti.
+function getNextTrainingDay(settings, strengthEnabled, fromOffset = 1) {
+  const restDays = settings.restDays || [0];
+  const activeDays = DOW_ORDER.filter(d => !restDays.includes(d));
+  const today = new Date();
+  for (let i = fromOffset; i <= 8; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+    const dow = d.getDay();
+    if (restDays.includes(dow)) continue;
+    const type = !strengthEnabled ? 'run' : (activeDays.indexOf(dow) % 2 === 0 ? 'run' : 'strength');
+    return { type, dow, dayOffset: i, label: i === 1 ? 'Domani' : DOW_FULL[dow] };
+  }
+  return null;
+}
+
+// Card-anteprima della prossima sessione (giorno + dettagli), per la Home "fatto".
+function nextSessionPreview(progress, profile, runSession) {
+  const settings = getSettings();
+  const strengthEnabled = profile.strengthEnabled !== false;
+  const next = getNextTrainingDay(settings, strengthEnabled);
+  if (!next) return null;
+
+  if (next.type === 'run') {
+    return el('div', { class: 'today-next' },
+      el('div', { class: 'today-next-label' }, `${next.label} · 🏃 Corsa`),
+      el('div', { class: 'today-next-title' }, runSession.title),
+      el('div', { class: 'today-next-desc' }, `${Math.round(runSession.totalSeconds / 60)} min · ${runSession.focus}`),
+      el('button', { class: 'btn btn-ghost btn-sm', onclick: () => showSessionPreview(runSession) }, 'Vedi dettagli'),
+    );
+  }
+  const sIdx = progress.strengthSessionIndex || 0;
+  const custom = progress.customStrengthSession;
+  const str = custom || getStrengthWeekSessions(progress.strengthWeek || 1, profile.strengthLevel || 'returning', progress.strengthRepScale || 1)[sIdx];
+  return el('div', { class: 'today-next' },
+    el('div', { class: 'today-next-label' }, `${next.label} · 💪 Forza${custom ? ' · su misura' : ''}`),
+    el('div', { class: 'today-next-title' }, str.title),
+    el('div', { class: 'today-next-desc' }, `~${str.estimatedMinutes} min · ${str.focus}`),
+    el('button', { class: 'btn btn-ghost btn-sm', onclick: () => showStrengthPreview(str) }, 'Vedi dettagli'),
+  );
+}
+
 function buildTodayCard(progress, profile, runSession, sessionsToday = []) {
   const settings = getSettings();
   const strengthEnabled = profile.strengthEnabled !== false;
@@ -382,7 +424,8 @@ function buildTodayCard(progress, profile, runSession, sessionsToday = []) {
       el('div', { class: 'today-done-list' }, ...doneToday.map(doneLine)),
       el('div', { class: 'today-desc' }, plan.type === 'rest'
         ? 'Oggi era riposo e ti sei mosso comunque. Ascolta il recupero.'
-        : 'Bel lavoro. Ora recupera — è lì che arrivano i risultati. La prossima sessione è domani.'),
+        : 'Bel lavoro. Ora recupera: è lì che arrivano i risultati.'),
+      nextSessionPreview(progress, profile, runSession),
       el('div', { class: 'today-more' },
         el('span', { class: 'today-more-label' }, 'Vuoi fare altro?'),
         el('div', { class: 'card-actions' }, ...trainMoreButtons()),
