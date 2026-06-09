@@ -423,11 +423,7 @@ function buildTodayCard(progress, profile, runSession, sessionsToday = []) {
       ),
       el('div', { class: 'today-desc' }, `~${sSession.estimatedMinutes} min · ${sSession.focus} · ${sessLabel}`),
       customStr ? el('div', { class: 'today-custom-note' },
-        el('span', {}, '🤖 Sessione su misura creata dal coach'),
-        el('button', { class: 'btn btn-ghost btn-sm', onclick: () => {
-          const pr = getProgress(); pr.customStrengthSession = null; saveProgress(pr);
-          renderHome(); toast('Tornato alla sessione standard del programma');
-        } }, 'Usa la standard'),
+        el('span', {}, '🤖 Su misura per te, scelta dal coach'),
       ) : null,
       el('div', { class: 'card-actions' },
         el('button', { class: 'btn btn-strength', onclick: () => startStrengthSession(sSession) }, 'Inizia forza'),
