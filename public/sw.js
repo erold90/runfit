@@ -1,5 +1,5 @@
 // RunFit Service Worker — offline-first cache shell
-const CACHE = 'runfit-v36';
+const CACHE = 'runfit-v37';
 const ASSETS = [
   './',
   './index.html',

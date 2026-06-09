@@ -73,6 +73,7 @@ let lastRenderDay = null; // giorno (toDateString) dell'ultimo render: per auto-
 // --- Metronomo cadenza (tum basso e morbido, solo fasi di corsa) -----------
 const CADENCE_BPM = { run: 176, jog: 170, brisk: 152 }; // passi/min per tipo di fase
 let metronome = null;
+let testRunActive = false; // true durante una corsa simulata (badge + velocità)
 function makeMetronome() {
   let ctx = null, timer = null;
   const click = () => {
@@ -205,6 +206,13 @@ function renderHome() {
   if (guidedPlanOn) {
     container.appendChild(buildTodayCard(progress, profile, session, sessionsToday));
   }
+
+  // PULSANTE TEST (temporaneo) — simula la corsa anche nei giorni di forza
+  container.appendChild(el('div', { class: 'card test-run-card' },
+    el('div', { class: 'card-label' }, '🧪 Test'),
+    el('div', { class: 'help-text' }, 'Simula la corsa 10× più veloce per provare cue del coach, "torna indietro" e metronomo, senza correre davvero (funziona anche oggi che è forza).'),
+    el('button', { class: 'btn btn-primary btn-block', onclick: startTestRun }, '🧪 Simula corsa'),
+  ));
 
   // Banner Test Iniziale (se non ancora fatto)
   const assessment = getAssessment();
@@ -682,27 +690,40 @@ function phaseTypeLabel(type) {
   }[type] || type;
 }
 
-function startSession(session) {
+function startSession(session, opts = {}) {
   setView('workout');
   document.body.classList.add('session-active');
   // Sblocca audio (richiesto da iOS dopo gesto utente)
   speak('Pronti?');
   const st = getSettings();
+  const test = opts.test === true;
+  // In test forziamo tutto ON per provare l'esperienza completa
+  testRunActive = test || st.testMode === true;
   currentRunner = new SessionRunner(session, {
-    outAndBack: st.outAndBack === true,
-    speed: st.testMode === true ? 10 : 1,   // modalità test: corsa simulata 10x
+    outAndBack: test ? true : st.outAndBack === true,
+    speed: testRunActive ? 10 : 1,   // corsa simulata 10x
   });
-  metronome = st.metronome === true ? makeMetronome() : null;
+  metronome = (test || st.metronome === true) ? makeMetronome() : null;
   renderActiveSession(session);
   currentRunner.start();
   if (metronome) metronome.startForPhase(session.phases[0].type);
   // Cue vocali su misura dal coach (async, non blocca la partenza)
-  if (getSettings().coachEnabled === true) {
+  if (test || st.coachEnabled === true) {
     const runnerRef = currentRunner;
     fetchRunCues().then(cues => {
       if (cues && cues.length && currentRunner === runnerRef) currentRunner.setCues(cues);
     });
   }
+}
+
+/** Avvia una corsa SIMULATA (test) dalla Home: 10x, con cue + metronomo + inversione. */
+function startTestRun() {
+  const progress = getProgress();
+  const profile = getProfile();
+  const weekSessions = getWeekSessions(progress.currentWeek, progress.weeklyVolume || 3);
+  const session = progress.customRunSession || weekSessions[progress.currentSessionIndex || 0];
+  if (!session) { toast('Nessuna corsa da simulare'); return; }
+  startSession(session, { test: true });
 }
 
 function renderActiveSession(session) {
@@ -752,7 +773,7 @@ function renderActiveSession(session) {
   });
 
   container.appendChild(el('div', { class: 'workout-screen' },
-    getSettings().testMode === true ? el('div', { class: 'test-badge' }, '🧪 Modalità test · corsa simulata 10×') : null,
+    testRunActive ? el('div', { class: 'test-badge' }, '🧪 Modalità test · corsa simulata 10×') : null,
     el('div', { class: 'workout-header' },
       el('div', { class: 'session-title-small' }, session.title),
       el('div', { class: 'session-focus-small' }, session.focus),
