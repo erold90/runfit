@@ -68,6 +68,7 @@ let currentRunner = null;
 let currentStrength = null;
 let currentView = 'home';
 let statsMode = 'run';   // Stats: 'run' (corsa) | 'strength' (forza)
+let lastRenderDay = null; // giorno (toDateString) dell'ultimo render: per auto-aggiornare a mezzanotte
 
 // --- Profile helpers -------------------------------------------------------
 function getAge() {
@@ -115,6 +116,7 @@ function setView(name) {
     coach: renderCoachChat,
   }[name];
   if (renderer) renderer();
+  lastRenderDay = new Date().toDateString();
 }
 
 // --- View: Home ------------------------------------------------------------
@@ -3340,6 +3342,15 @@ async function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
+  // Auto-aggiornamento al cambio giorno: se torni nell'app dopo la mezzanotte,
+  // la vista corrente si rigenera col giorno reale (niente più "fermo a ieri").
+  const refreshIfNewDay = () => {
+    if (document.visibilityState === 'hidden') return;
+    if (lastRenderDay && lastRenderDay !== new Date().toDateString()) setView(currentView);
+  };
+  document.addEventListener('visibilitychange', refreshIfNewDay);
+  window.addEventListener('focus', refreshIfNewDay);
+  window.addEventListener('pageshow', refreshIfNewDay);
   setView('home');
 }
 document.addEventListener('DOMContentLoaded', init);
