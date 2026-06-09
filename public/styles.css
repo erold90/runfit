@@ -867,6 +867,12 @@ body.session-strength .btn-control.btn-strength {
   animation: turnPulse 1s ease-in-out infinite;
 }
 @keyframes turnPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+.test-badge {
+  text-align: center; font-weight: 700; font-size: 0.8rem;
+  color: #0a0e1a; background: #38bdf8;
+  padding: 6px 12px; border-radius: 99px; margin: 0 auto 8px;
+  display: inline-block; align-self: center;
+}
 .preview-turn-hint {
   margin: 4px 0 12px;
   padding: 9px 12px;

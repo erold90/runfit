@@ -70,6 +70,38 @@ let currentView = 'home';
 let statsMode = 'run';   // Stats: 'run' (corsa) | 'strength' (forza)
 let lastRenderDay = null; // giorno (toDateString) dell'ultimo render: per auto-aggiornare a mezzanotte
 
+// --- Metronomo cadenza (tum basso e morbido, solo fasi di corsa) -----------
+const CADENCE_BPM = { run: 176, jog: 170, brisk: 152 }; // passi/min per tipo di fase
+let metronome = null;
+function makeMetronome() {
+  let ctx = null, timer = null;
+  const click = () => {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 90;            // basso
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.012);  // morbido, non esagerato
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(t); osc.stop(t + 0.14);
+  };
+  return {
+    startForPhase(type) {
+      this.stop();
+      const bpm = CADENCE_BPM[type];
+      if (!bpm) return;
+      try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
+      if (ctx.state === 'suspended') ctx.resume();
+      click();
+      timer = setInterval(click, 60000 / bpm);
+    },
+    stop() { if (timer) { clearInterval(timer); timer = null; } },
+  };
+}
+
 // --- Profile helpers -------------------------------------------------------
 function getAge() {
   const p = getProfile();
@@ -655,9 +687,15 @@ function startSession(session) {
   document.body.classList.add('session-active');
   // Sblocca audio (richiesto da iOS dopo gesto utente)
   speak('Pronti?');
-  currentRunner = new SessionRunner(session, { outAndBack: getSettings().outAndBack === true });
+  const st = getSettings();
+  currentRunner = new SessionRunner(session, {
+    outAndBack: st.outAndBack === true,
+    speed: st.testMode === true ? 10 : 1,   // modalità test: corsa simulata 10x
+  });
+  metronome = st.metronome === true ? makeMetronome() : null;
   renderActiveSession(session);
   currentRunner.start();
+  if (metronome) metronome.startForPhase(session.phases[0].type);
   // Cue vocali su misura dal coach (async, non blocca la partenza)
   if (getSettings().coachEnabled === true) {
     const runnerRef = currentRunner;
@@ -707,9 +745,14 @@ function renderActiveSession(session) {
   btnPause.addEventListener('click', () => {
     currentRunner.toggle();
     btnPause.textContent = currentRunner.running ? '⏸ Pausa' : '▶ Riprendi';
+    if (metronome) {
+      if (currentRunner.running) metronome.startForPhase(currentRunner.currentPhase.type);
+      else metronome.stop();
+    }
   });
 
   container.appendChild(el('div', { class: 'workout-screen' },
+    getSettings().testMode === true ? el('div', { class: 'test-badge' }, '🧪 Modalità test · corsa simulata 10×') : null,
     el('div', { class: 'workout-header' },
       el('div', { class: 'session-title-small' }, session.title),
       el('div', { class: 'session-focus-small' }, session.focus),
@@ -758,6 +801,7 @@ function renderActiveSession(session) {
       ? `Dopo: ${phaseTypeLabel(nxt.type)} · ${fmtTime(nxt.seconds)}`
       : 'Ultima fase!';
     updateZoneInfo(zoneInfo, phase.type);
+    if (metronome) metronome.startForPhase(phase.type);
   });
 
   currentRunner.addEventListener('turnaround', () => {
@@ -767,6 +811,7 @@ function renderActiveSession(session) {
   });
 
   currentRunner.addEventListener('finish', () => {
+    if (metronome) metronome.stop();
     document.body.classList.remove('session-active');
     showFeedbackForm(session);
   });
@@ -784,6 +829,7 @@ function updateZoneInfo(zoneInfoEl, phaseType) {
 
 function confirmStop() {
   if (confirm('Vuoi davvero terminare la sessione?')) {
+    if (metronome) metronome.stop();
     currentRunner.stop();
     document.body.classList.remove('session-active');
     showFeedbackForm(currentRunner.session, true);
@@ -3094,6 +3140,12 @@ function renderProfile() {
     el('div', { class: 'help-text' }, planSummaryText(settings, profile)),
     toggleField('Corsa andata/ritorno (avviso "torna indietro")', settings.outAndBack === true, v => updateSettings({ outAndBack: v })),
     el('div', { class: 'help-text' }, 'Se attivo: durante la corsa, raggiunta metà della distanza stimata, la voce ti dice di tornare indietro così finisci dove sei partito. Tiene conto di fasi e velocità diverse (riscaldamento, jog, defaticamento).'),
+    toggleField('Metronomo cadenza (tum basso)', settings.metronome === true, v => updateSettings({ metronome: v })),
+    el('div', { class: 'help-text' }, 'Un "tum" basso e morbido che batte la cadenza target (~170 passi/min) durante le fasi di corsa. Spento nelle camminate.'),
+    toggleField('🧪 Modalità test (simula la corsa veloce)', settings.testMode === true, v => { updateSettings({ testMode: v }); renderProfile(); }),
+    el('div', { class: 'help-text' }, settings.testMode === true
+      ? 'ATTIVA: la prossima corsa scorre 10× più veloce, così provi cue vocali, "torna indietro" e metronomo senza correre davvero. Ricordati di disattivarla prima di correre sul serio.'
+      : 'Fa scorrere la corsa 10× più veloce per provare al volo tutte le funzioni (cue del coach, inversione, metronomo) senza correre. Poi disattivala.'),
   ));
 
   // Coach AI (opzionale)
