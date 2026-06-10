@@ -70,16 +70,27 @@ let currentView = 'home';
 let statsMode = 'run';   // Stats: 'run' (corsa) | 'strength' (forza)
 let lastRenderDay = null; // giorno (toDateString) dell'ultimo render: per auto-aggiornare a mezzanotte
 
-// --- Metronomo cadenza (tum basso e morbido, solo fasi di corsa) -----------
-const CADENCE_BPM = { run: 176, jog: 170, brisk: 152 }; // passi/min per tipo di fase
+// --- Metronomo cadenza (tum basso, solo fasi di corsa) ---------------------
+// Cadenza target evidence-based per TIPO di fase, ADATTATA all'altezza:
+// ~0.8 spm in meno per ogni cm oltre i 178 (falcata più lunga = meno passi).
+// Rif.: corsa facile 165-175 e sostenuta 175-185 spm per ~178 cm; camminata
+// "vigorosa" ~120-130 spm (≈100 = moderata). 152 era un errore (cadenza da jog).
+function cadenceForType(type, heightCm) {
+  const h = heightCm || 178;
+  const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
+  if (type === 'jog')   return cl(170 - 0.8 * (h - 178), 158, 184); // corsa leggera (easy)
+  if (type === 'run')   return cl(176 - 0.8 * (h - 178), 162, 188); // corsa sostenuta
+  if (type === 'brisk') return cl(128 - 0.4 * (h - 178), 115, 140); // camminata veloce
+  return 0; // warmup / walk / cooldown: nessun metronomo
+}
 let metronome = null;
-function makeMetronome() {
+function makeMetronome(heightCm) {
   let timer = null;
   return {
     startForPhase(type) {
       this.stop();
-      const bpm = CADENCE_BPM[type];
-      if (!bpm) return;            // niente metronomo nelle camminate/riscaldamento
+      const bpm = cadenceForType(type, heightCm);
+      if (!bpm) return;            // niente metronomo in riscaldamento/camminata
       tum();                       // primo colpo subito
       timer = setInterval(() => tum(), 60000 / bpm);
     },
@@ -675,7 +686,7 @@ function startSession(session) {
   speak('Pronti?');
   const st = getSettings();
   currentRunner = new SessionRunner(session, { outAndBack: st.outAndBack === true });
-  metronome = st.metronome === true ? makeMetronome() : null;
+  metronome = st.metronome === true ? makeMetronome(getProfile().heightCm) : null;
   renderActiveSession(session);
   currentRunner.start();
   if (metronome) metronome.startForPhase(session.phases[0].type);
@@ -3123,7 +3134,7 @@ function renderProfile() {
     toggleField('Corsa andata/ritorno (avviso "torna indietro")', settings.outAndBack === true, v => updateSettings({ outAndBack: v })),
     el('div', { class: 'help-text' }, 'Se attivo: durante la corsa, raggiunta metà della distanza stimata, la voce ti dice di tornare indietro così finisci dove sei partito. Tiene conto di fasi e velocità diverse (riscaldamento, jog, defaticamento).'),
     toggleField('Metronomo cadenza (tum basso)', settings.metronome === true, v => updateSettings({ metronome: v })),
-    el('div', { class: 'help-text' }, 'Un "tum" basso e morbido che batte la cadenza target (~170 passi/min) durante le fasi di corsa. Spento nelle camminate.'),
+    el('div', { class: 'help-text' }, `Un "tum" basso che batte la cadenza target per ogni fase, calcolata sulla tua altezza (${getProfile().heightCm || 178} cm): corsa ${cadenceForType('run', getProfile().heightCm)}, jog ${cadenceForType('jog', getProfile().heightCm)}, passo veloce ${cadenceForType('brisk', getProfile().heightCm)} passi/min. Spento in riscaldamento e camminata di recupero.`),
   ));
 
   // Coach AI (opzionale)
