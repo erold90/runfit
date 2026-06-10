@@ -81,7 +81,8 @@ function cadenceForType(type, heightCm) {
   if (type === 'jog')   return cl(170 - 0.8 * (h - 178), 158, 184); // corsa leggera (easy)
   if (type === 'run')   return cl(176 - 0.8 * (h - 178), 162, 188); // corsa sostenuta
   if (type === 'brisk') return cl(128 - 0.4 * (h - 178), 115, 140); // camminata veloce
-  return 0; // warmup / walk / cooldown: nessun metronomo
+  if (type === 'walk')  return cl(122 - 0.4 * (h - 178), 108, 134); // camminata attiva (run/walk)
+  return 0; // warmup / cooldown: nessun metronomo (ease-in / ease-out)
 }
 let metronome = null;
 function makeMetronome(heightCm) {
@@ -3134,7 +3135,7 @@ function renderProfile() {
     toggleField('Corsa andata/ritorno (avviso "torna indietro")', settings.outAndBack === true, v => updateSettings({ outAndBack: v })),
     el('div', { class: 'help-text' }, 'Se attivo: durante la corsa, raggiunta metà della distanza stimata, la voce ti dice di tornare indietro così finisci dove sei partito. Tiene conto di fasi e velocità diverse (riscaldamento, jog, defaticamento).'),
     toggleField('Metronomo cadenza (tum basso)', settings.metronome === true, v => updateSettings({ metronome: v })),
-    el('div', { class: 'help-text' }, `Un "tum" basso che batte la cadenza target per ogni fase, calcolata sulla tua altezza (${getProfile().heightCm || 178} cm): corsa ${cadenceForType('run', getProfile().heightCm)}, jog ${cadenceForType('jog', getProfile().heightCm)}, passo veloce ${cadenceForType('brisk', getProfile().heightCm)} passi/min. Spento in riscaldamento e camminata di recupero.`),
+    el('div', { class: 'help-text' }, `Un "tum" basso che batte la cadenza target per ogni fase, calcolata sulla tua altezza (${getProfile().heightCm || 178} cm): corsa ${cadenceForType('run', getProfile().heightCm)}, jog ${cadenceForType('jog', getProfile().heightCm)}, passo veloce ${cadenceForType('brisk', getProfile().heightCm)}, camminata ${cadenceForType('walk', getProfile().heightCm)} passi/min. Spento solo in riscaldamento e defaticamento.`),
   ));
 
   // Coach AI (opzionale)
