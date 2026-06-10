@@ -301,8 +301,6 @@ export class SessionRunner extends EventTarget {
     this.outAndBack = !!opts.outAndBack;
     this.turnaroundSec = this.outAndBack ? this._computeTurnaroundSec() : null;
     this.turnaroundFired = false;
-    // Modalità test: il tempo logico scorre più veloce (anteprima senza correre)
-    this.speed = opts.speed && opts.speed > 1 ? opts.speed : 1;
     // Microcue vocali del coach (arrivano async dopo lo start): distribuiti
     // in modo discreto nella sessione, mai sopra i cambi fase.
     this.cues = [];
@@ -363,7 +361,7 @@ export class SessionRunner extends EventTarget {
     fxStart();
     this._announcePhase(this.currentPhase, true);
     acquireWakeLock();
-    this.timer = setInterval(() => this._tick(), Math.max(40, Math.round(1000 / this.speed)));
+    this.timer = setInterval(() => this._tick(), 1000);
     this.dispatchEvent(new CustomEvent('resume'));
   }
 

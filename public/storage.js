@@ -73,7 +73,6 @@ const defaultSettings = {
   guidedPlan: true,        // Mostra la card "Oggi" che alterna corsa/forza/riposo
   outAndBack: false,       // Corsa andata/ritorno: avvisa a metà distanza di tornare indietro
   metronome: false,        // Metronomo cadenza (tum basso) nelle fasi di corsa
-  testMode: false,         // Modalità test: simula la corsa velocemente (anteprima cue/inversione/metronomo)
   // AI Coach (opzionale) — proxy Worker, vedi coach-worker/
   coachEnabled: false,     // off di default
   coachUrl: '',            // URL del Worker coach (es. https://runfit-coach.<acct>.workers.dev)
