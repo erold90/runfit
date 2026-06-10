@@ -48,6 +48,30 @@ export const fxFinish = () => beepSequence([
   { f: 800 }, { f: 1000 }, { f: 1200 }, { f: 1600, d: 0.5, v: 0.4 }
 ]);
 
+// Sblocca/avvia il contesto audio dentro un gesto utente (iOS lo esige).
+export function unlockAudio() { try { getCtx(); } catch {} }
+
+// "Tum" del metronomo: colpo basso ma percepibile (pitch drop 170→85 Hz),
+// morbido. Usa il contesto CONDIVISO già sbloccato (non crearne uno nuovo: su
+// iOS un secondo AudioContext resta spesso sospeso e muto).
+export function tum(volume = 0.4) {
+  try {
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(170, t);
+    osc.frequency.exponentialRampToValueAtTime(85, t + 0.12);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(volume, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.19);
+  } catch {}
+}
+
 // --- Text-to-speech italiano -----------------------------------------------
 let voicesLoaded = false;
 let cachedVoice = null;

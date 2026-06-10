@@ -22,7 +22,7 @@ import {
   hrrCategory, strengthAssessment,
   calibrate, suggestedZ2Pace,
 } from './assessment.js';
-import { SessionRunner, StrengthRunner, speak, loadVoices } from './coach.js';
+import { SessionRunner, StrengthRunner, speak, loadVoices, tum, unlockAudio } from './coach.js';
 import {
   getStrengthWeekSessions, strengthWeekTip,
   STRENGTH_TOTAL_WEEKS, recomputeStrengthState, sessionRepRatio,
@@ -74,29 +74,14 @@ let lastRenderDay = null; // giorno (toDateString) dell'ultimo render: per auto-
 const CADENCE_BPM = { run: 176, jog: 170, brisk: 152 }; // passi/min per tipo di fase
 let metronome = null;
 function makeMetronome() {
-  let ctx = null, timer = null;
-  const click = () => {
-    if (!ctx) return;
-    const t = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 90;            // basso
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.16, t + 0.012);  // morbido, non esagerato
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-    osc.connect(g); g.connect(ctx.destination);
-    osc.start(t); osc.stop(t + 0.14);
-  };
+  let timer = null;
   return {
     startForPhase(type) {
       this.stop();
       const bpm = CADENCE_BPM[type];
-      if (!bpm) return;
-      try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
-      if (ctx.state === 'suspended') ctx.resume();
-      click();
-      timer = setInterval(click, 60000 / bpm);
+      if (!bpm) return;            // niente metronomo nelle camminate/riscaldamento
+      tum();                       // primo colpo subito
+      timer = setInterval(() => tum(), 60000 / bpm);
     },
     stop() { if (timer) { clearInterval(timer); timer = null; } },
   };
@@ -686,6 +671,7 @@ function startSession(session) {
   setView('workout');
   document.body.classList.add('session-active');
   // Sblocca audio (richiesto da iOS dopo gesto utente)
+  unlockAudio();
   speak('Pronti?');
   const st = getSettings();
   currentRunner = new SessionRunner(session, { outAndBack: st.outAndBack === true });
