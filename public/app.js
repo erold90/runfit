@@ -22,7 +22,7 @@ import {
   hrrCategory, strengthAssessment,
   calibrate, suggestedZ2Pace,
 } from './assessment.js';
-import { SessionRunner, StrengthRunner, speak, loadVoices, tum, unlockAudio } from './coach.js';
+import { SessionRunner, StrengthRunner, speak, loadVoices, tumAt, audioNow, unlockAudio, startAudioKeepAlive, stopAudioKeepAlive } from './coach.js';
 import {
   getStrengthWeekSessions, strengthWeekTip,
   STRENGTH_TOTAL_WEEKS, recomputeStrengthState, sessionRepRatio,
@@ -85,17 +85,31 @@ function cadenceForType(type, heightCm) {
   return 0; // warmup / cooldown: nessun metronomo (ease-in / ease-out)
 }
 let metronome = null;
+// Metronomo con SCHEDULAZIONE ANTICIPATA sull'orologio audio (lookahead):
+// pre-programma i "tum" ~0,4s avanti, così restano precisi anche se il timer JS
+// viene rallentato (schermo che si spegne). Insieme al keep-alive sopravvive
+// meglio al background su iOS.
 function makeMetronome(heightCm) {
-  let timer = null;
+  let timer = null, nextTime = 0, bpm = 0;
+  const AHEAD = 0.4;
+  const schedule = () => {
+    if (!bpm) return;
+    const now = audioNow();
+    while (nextTime < now + AHEAD) {
+      tumAt(nextTime);
+      nextTime += 60 / bpm;
+    }
+  };
   return {
     startForPhase(type) {
       this.stop();
-      const bpm = cadenceForType(type, heightCm);
-      if (!bpm) return;            // niente metronomo in riscaldamento/camminata
-      tum();                       // primo colpo subito
-      timer = setInterval(() => tum(), 60000 / bpm);
+      bpm = cadenceForType(type, heightCm);
+      if (!bpm) return;            // niente metronomo in riscaldamento/defaticamento
+      nextTime = audioNow() + 0.06;
+      schedule();
+      timer = setInterval(schedule, 100);
     },
-    stop() { if (timer) { clearInterval(timer); timer = null; } },
+    stop() { if (timer) { clearInterval(timer); timer = null; } bpm = 0; },
   };
 }
 
@@ -688,6 +702,7 @@ function startSession(session) {
   const st = getSettings();
   currentRunner = new SessionRunner(session, { outAndBack: st.outAndBack === true });
   metronome = st.metronome === true ? makeMetronome(getProfile().heightCm) : null;
+  if (metronome) startAudioKeepAlive(); // tiene vivo l'audio se lo schermo si spegne
   renderActiveSession(session);
   currentRunner.start();
   if (metronome) metronome.startForPhase(session.phases[0].type);
@@ -806,6 +821,7 @@ function renderActiveSession(session) {
 
   currentRunner.addEventListener('finish', () => {
     if (metronome) metronome.stop();
+    stopAudioKeepAlive();
     document.body.classList.remove('session-active');
     showFeedbackForm(session);
   });
@@ -824,6 +840,7 @@ function updateZoneInfo(zoneInfoEl, phaseType) {
 function confirmStop() {
   if (confirm('Vuoi davvero terminare la sessione?')) {
     if (metronome) metronome.stop();
+    stopAudioKeepAlive();
     currentRunner.stop();
     document.body.classList.remove('session-active');
     showFeedbackForm(currentRunner.session, true);

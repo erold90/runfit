@@ -51,13 +51,17 @@ export const fxFinish = () => beepSequence([
 // Sblocca/avvia il contesto audio dentro un gesto utente (iOS lo esige).
 export function unlockAudio() { try { getCtx(); } catch {} }
 
-// "Tum" del metronomo: colpo basso ma percepibile (pitch drop 170→85 Hz),
-// morbido. Usa il contesto CONDIVISO già sbloccato (non crearne uno nuovo: su
-// iOS un secondo AudioContext resta spesso sospeso e muto).
-export function tum(volume = 0.4) {
+// Tempo corrente dell'orologio audio (per la schedulazione anticipata).
+export function audioNow() { try { return getCtx().currentTime; } catch { return 0; } }
+
+// "Tum" del metronomo schedulato a un istante preciso dell'orologio audio.
+// Colpo basso ma percepibile (pitch drop 170→85 Hz), morbido. Usa il contesto
+// CONDIVISO già sbloccato. Schedulare in anticipo rende il battito immune al
+// throttling dei timer JS quando lo schermo si spegne.
+export function tumAt(when, volume = 0.4) {
   try {
     const ctx = getCtx();
-    const t = ctx.currentTime;
+    const t = Math.max(when, ctx.currentTime);
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
@@ -70,6 +74,32 @@ export function tum(volume = 0.4) {
     osc.start(t);
     osc.stop(t + 0.19);
   } catch {}
+}
+export function tum(volume = 0.4) { tumAt(audioNow(), volume); }
+
+// Keep-alive: un loop quasi-silenzioso tiene attivo il contesto audio quando lo
+// schermo si spegne / l'app va in background (iOS altrimenti sospende il Web
+// Audio e il metronomo tace). Best-effort: a schermo bloccato a lungo iOS può
+// comunque sospendere tutto.
+let keepAliveSrc = null;
+export function startAudioKeepAlive() {
+  try {
+    const ctx = getCtx();
+    if (keepAliveSrc) return;
+    const buf = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.5), ctx.sampleRate);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < ch.length; i++) ch[i] = (i % 2000 === 0) ? 0.0003 : 0; // quasi-silenzio
+    const src = ctx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    const g = ctx.createGain(); g.gain.value = 0.0012;
+    src.connect(g).connect(ctx.destination);
+    src.start();
+    keepAliveSrc = src;
+  } catch {}
+}
+export function stopAudioKeepAlive() {
+  try { if (keepAliveSrc) { keepAliveSrc.stop(); keepAliveSrc.disconnect(); } } catch {}
+  keepAliveSrc = null;
 }
 
 // --- Text-to-speech italiano -----------------------------------------------
@@ -144,8 +174,9 @@ export async function releaseWakeLock() {
   }
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && getSettings().keepScreenOn) {
-    acquireWakeLock();
+  if (document.visibilityState === 'visible') {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (getSettings().keepScreenOn) acquireWakeLock();
   }
 });
 
