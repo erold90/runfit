@@ -194,8 +194,8 @@ function corsHeaders(origin, allowed) {
   const ok = origin && list.includes(origin);
   return {
     'Access-Control-Allow-Origin': ok ? origin : list[0] || '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-RunFit-Token',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-RunFit-Token, Authorization',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };
@@ -331,6 +331,27 @@ export default {
     const path = new URL(request.url).pathname;
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+
+    // --- Backup dati RunFit (/backup): GET legge, POST salva. Auth: Bearer = RUNFIT_TOKEN, storage KV ---
+    if (path.endsWith('/backup')) {
+      const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      if (env.RUNFIT_TOKEN && token !== env.RUNFIT_TOKEN) return json({ error: 'Non autorizzato' }, 401, cors);
+      if (!env.RUNFIT_BACKUP) return json({ error: 'Backup non configurato (manca KV)' }, 500, cors);
+      const KEY = 'backup:default';
+      if (request.method === 'GET') {
+        const data = await env.RUNFIT_BACKUP.get(KEY);
+        if (!data) return json({ error: 'Nessun backup trovato' }, 404, cors);
+        return new Response(data, { status: 200, headers: { 'Content-Type': 'application/json', ...cors } });
+      }
+      if (request.method === 'POST') {
+        const text = await request.text();
+        if (!text || text.length > 5_000_000) return json({ error: 'Payload non valido' }, 400, cors);
+        await env.RUNFIT_BACKUP.put(KEY, text);
+        return json({ ok: true }, 200, cors);
+      }
+      return json({ error: 'Metodo non consentito' }, 405, cors);
+    }
+
     if (request.method !== 'POST') return json({ error: 'Metodo non consentito' }, 405, cors);
 
     if (env.RUNFIT_TOKEN) {

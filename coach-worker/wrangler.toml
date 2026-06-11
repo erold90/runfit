@@ -17,3 +17,8 @@ workers_dev = true
 # Origin autorizzati a chiamare il proxy (CORS). Aggiungi/rimuovi qui.
 ALLOWED_ORIGINS = "https://erold90.github.io,http://localhost:8000,http://127.0.0.1:8000"
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
+
+# --- Storage backup dati RunFit (endpoint /backup) ---
+[[kv_namespaces]]
+binding = "RUNFIT_BACKUP"
+id = "e1361c100fd74c73ae946d4443eb607c"
