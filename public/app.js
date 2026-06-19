@@ -2161,6 +2161,30 @@ function flagBadge(flag) {
 // --- Chat libera col coach -------------------------------------------------
 let coachChat = []; // {role:'user'|'assistant', content, pending?}
 
+/** Copia testo negli appunti, con fallback per Safari/iOS. */
+function copyText(text) {
+  const ok = () => toast('Copiato ✓');
+  const fallback = () => {
+    const ta = el('textarea', {});
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    ta.setSelectionRange(0, text.length);
+    let done = false;
+    try { done = document.execCommand('copy'); } catch { done = false; }
+    document.body.removeChild(ta);
+    done ? ok() : toast('Copia non riuscita');
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok, fallback);
+    } else fallback();
+  } catch { fallback(); }
+}
+
 function renderCoachChat() {
   const container = $('#view-coach');
   container.innerHTML = '';
@@ -2187,8 +2211,16 @@ function renderCoachChat() {
     msgs.appendChild(el('div', { class: 'chat-intro' },
       'Ciao Daniele! Chiedimi quello che vuoi — "posso allenarmi oggi?", "come sto andando?", dubbi su un esercizio, un fastidio. Vedo i tuoi dati.'));
   }
-  coachChat.forEach(m => msgs.appendChild(
-    el('div', { class: `chat-msg chat-${m.role}${m.pending ? ' chat-pending' : ''}` }, m.content)));
+  coachChat.forEach(m => {
+    const bubble = el('div', { class: `chat-msg chat-${m.role}${m.pending ? ' chat-pending' : ''}` }, m.content);
+    // Tasto "Copia" sulle risposte del coach (la selezione manuale su iOS è bloccata
+    // dal user-select:none globale; il bottone è il modo più affidabile).
+    if (m.role === 'assistant' && !m.pending) {
+      bubble.appendChild(el('button', { class: 'chat-copy', title: 'Copia il testo',
+        onclick: () => copyText(m.content) }, '⧉ Copia'));
+    }
+    msgs.appendChild(bubble);
+  });
 
   const input = el('textarea', { class: 'chat-input', rows: '1', placeholder: 'Scrivi al coach…' });
   const send = () => {

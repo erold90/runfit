@@ -1102,10 +1102,20 @@ body.coach-active .tabbar { display: none; }
 .chat-msg {
   max-width: 82%; padding: 9px 13px; border-radius: 16px;
   font-size: 0.95rem; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word;
+  /* Riabilita la selezione del testo (sovrascrive lo user-select:none globale) */
+  -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
 }
 .chat-user { align-self: flex-end; background: var(--accent); color: #04231a; border-bottom-right-radius: 5px; }
 .chat-assistant { align-self: flex-start; background: var(--bg-elev); border: 1px solid rgba(56,189,248,0.25); border-bottom-left-radius: 5px; }
 .chat-pending { opacity: 0.6; font-style: italic; }
+.chat-copy {
+  display: block; margin-top: 8px;
+  background: rgba(56,189,248,0.14); color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.3); border-radius: 8px;
+  padding: 4px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  -webkit-user-select: none; user-select: none;
+}
+.chat-copy:active { background: rgba(56,189,248,0.28); }
 .chat-inputbar {
   flex-shrink: 0; display: flex; gap: 8px; align-items: flex-end;
   padding: 10px 12px calc(env(safe-area-inset-bottom) + 10px);
