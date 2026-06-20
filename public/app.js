@@ -1933,8 +1933,8 @@ function applyStrengthProgress() {
 // ============================================================================
 
 /** Contesto per il coach arricchito col piano del giorno e le prossime sessioni. */
-function buildCoachContext() {
-  const ctx = coachContext();
+function buildCoachContext(focusSession = null) {
+  const ctx = coachContext(focusSession);
   try {
     const progress = getProgress();
     const profile = getProfile();
@@ -2001,7 +2001,7 @@ async function fetchRunCues() {
 }
 
 /** Chiama il Worker coach (debrief). Ritorna {data}, {skipped} o {error}. Mai lancia. */
-async function fetchCoach() {
+async function fetchCoach(focusSession = null) {
   const s = getSettings();
   if (!s.coachEnabled || !s.coachUrl) return { skipped: true };
   try {
@@ -2012,7 +2012,7 @@ async function fetchCoach() {
         'Content-Type': 'application/json',
         ...(s.coachToken ? { 'X-RunFit-Token': s.coachToken } : {}),
       },
-      body: JSON.stringify({ context: buildCoachContext() }),
+      body: JSON.stringify({ context: buildCoachContext(focusSession) }),
     });
     if (!res.ok) return { error: `HTTP ${res.status}` };
     const data = await res.json();
@@ -2356,6 +2356,61 @@ function mountCoachDebrief() {
   });
 }
 
+/**
+ * Fa analizzare al coach UNA sessione specifica (es. dallo Storico) e mostra il
+ * debrief in una modale. Stessa logica del debrief di fine sessione: valuta la
+ * sessione (con storico) e può aggiornare/creare le prossime.
+ */
+function analyzeSessionWithCoach(session) {
+  const s = getSettings();
+  if (!s.coachEnabled || !s.coachUrl) { toast('Attiva il Coach AI in Profilo'); return; }
+  const modal = $('#modal');
+  modal.innerHTML = '';
+  modal.classList.add('open');
+  const body = el('div', { class: 'modal-body' },
+    el('div', { class: 'coach-card coach-loading' },
+      el('div', { class: 'coach-head' },
+        el('span', { class: 'coach-avatar' }, '🤖'),
+        el('span', { class: 'coach-title' }, 'Il coach sta analizzando questa sessione…'),
+      ),
+    ),
+  );
+  modal.appendChild(el('div', { class: 'modal-content' },
+    el('div', { class: 'modal-header' },
+      el('h2', {}, '🤖 Analisi del coach'),
+      el('button', { class: 'icon-btn', onclick: () => modal.classList.remove('open') }, '×'),
+    ),
+    body,
+  ));
+
+  fetchCoach(session).then(r => {
+    body.innerHTML = '';
+    if (r.skipped) { body.appendChild(el('div', { class: 'coach-sub' }, 'Coach AI non configurato (Profilo).')); return; }
+    if (r.error || !r.data) {
+      body.appendChild(el('div', { class: 'coach-sub' }, 'Coach non raggiungibile (offline o errore). Riprova tra poco.'));
+      return;
+    }
+    const d = r.data;
+    // Stessa logica del debrief: applica eventuali aggiustamenti / prossime sessioni
+    const applied = d.change ? applyCoachAdjustment(d.change, null) : null;
+    const rewriteRun = d.rewriteRun ? applyRunRewrite(d.rewriteRun) : null;
+    const rewriteStr = d.rewriteStrength ? applyStrengthRewrite(d.rewriteStrength) : null;
+    const card = el('div', { class: 'coach-card' },
+      el('div', { class: 'coach-head' },
+        el('span', { class: 'coach-avatar' }, '🤖'),
+        el('span', { class: 'coach-title' }, 'Il tuo coach'),
+      ),
+      el('div', { class: 'coach-debrief' }, d.debrief || ''),
+    );
+    const summary = coachChangeSummary(applied, rewriteRun, rewriteStr);
+    if (summary) card.appendChild(el('div', { class: 'coach-applied' }, summary));
+    const detail = rewriteDetailText(rewriteRun, rewriteStr);
+    if (detail) card.appendChild(el('div', { class: 'coach-session-detail' }, detail));
+    card.appendChild(el('button', { class: 'chat-copy', onclick: () => copyText(d.debrief || '') }, '⧉ Copia'));
+    body.appendChild(card);
+  });
+}
+
 function showStrengthResultsScreen(record) {
   const container = $('#view-workout');
   container.innerHTML = '';
@@ -2649,6 +2704,16 @@ function showSessionEditor(s) {
         setView('history');
       } }, 'Salva modifiche'),
     ),
+    // Fai ragionare il coach su QUESTA sessione (come a fine allenamento).
+    // Salva prima le modifiche, così il coach legge i valori aggiornati.
+    getSettings().coachEnabled === true ? el('button', {
+      class: 'btn btn-block coach-analyze-btn',
+      onclick: () => {
+        const updated = recomputeSessionRecord(s, st, repsLog);
+        updateSession(updated);
+        analyzeSessionWithCoach(updated);
+      },
+    }, '🤖 Fai analizzare al coach') : null,
   ));
 }
 

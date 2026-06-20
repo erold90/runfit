@@ -157,7 +157,7 @@ export function addWeight(kg, dateISO = new Date().toISOString()) {
 // Impacchetta profilo + assessment + progress + ultima sessione + storico
 // recente da inviare al Worker coach. Solo dati di allenamento, nessun dato
 // non pertinente.
-export function coachContext() {
+export function coachContext(focusSession = null) {
   const profile = getProfile();
   const res = getAssessment().results || {};
   const progress = getProgress();
@@ -180,24 +180,28 @@ export function coachContext() {
 
   // Ultime ~20 sessioni per i trend; dettaglio ripetizioni solo sulle ultime 6
   // (il completedSetsLog è pesante: evita di gonfiare i token sulle più vecchie).
-  const slice = sessions.slice(-20);
-  const recent = slice.map((s, i) => {
-    const detailed = i >= slice.length - 6;
-    return {
-      type: s.type, title: s.title, week: s.week, completedAt: s.completedAt,
-      when: relativeDay(s.completedAt), // "oggi" | "ieri" | "N giorni fa"
-      rpe: s.rpe, durationMin: s.durationMin, avgHr: s.avgHr, maxHr: s.maxHr, kcal: s.kcal,
-      km: s.km, paceSecPerKm: s.paceSecPerKm, cadence: s.cadence,
-      // Distribuzione del tempo nelle zone cardiache (secondi): quadro completo
-      // dell'intensità reale della sessione, non solo Z2/Z3.
-      timeInZoneSec: s.timeInZoneSec,
-      completedSets: s.completedSets, totalSets: s.totalSets,
-      completedSetsLog: (detailed && s.type === 'strength') ? s.completedSetsLog : undefined,
-      notes: s.notes || undefined,
-    };
+  const mapSession = (s, detailed) => ({
+    type: s.type, title: s.title, week: s.week, completedAt: s.completedAt,
+    when: relativeDay(s.completedAt), // "oggi" | "ieri" | "N giorni fa"
+    rpe: s.rpe, durationMin: s.durationMin, avgHr: s.avgHr, maxHr: s.maxHr, kcal: s.kcal,
+    km: s.km, paceSecPerKm: s.paceSecPerKm, cadence: s.cadence,
+    // Distribuzione del tempo nelle zone cardiache (secondi): quadro completo
+    // dell'intensità reale della sessione, non solo Z2/Z3.
+    timeInZoneSec: s.timeInZoneSec,
+    completedSets: s.completedSets, totalSets: s.totalSets,
+    completedSetsLog: (detailed && s.type === 'strength') ? s.completedSetsLog : undefined,
+    notes: s.notes || undefined,
   });
-  const lastSession = recent.length ? recent[recent.length - 1] : null;
-  const history = recent.slice(0, -1);
+  const slice = sessions.slice(-20);
+  const recent = slice.map((s, i) => mapSession(s, i >= slice.length - 6));
+  // focusSession: analizza una sessione SPECIFICA (es. dallo Storico) come se
+  // fosse "quella appena conclusa"; le altre diventano lo storico di confronto.
+  const lastSession = focusSession
+    ? mapSession(focusSession, true)
+    : (recent.length ? recent[recent.length - 1] : null);
+  const history = focusSession
+    ? recent.filter(r => r.completedAt !== focusSession.completedAt)
+    : recent.slice(0, -1);
 
   // Andamento peso strutturato (per legare allenamento ↔ dimagrimento)
   const weightTrend = weights.length ? {

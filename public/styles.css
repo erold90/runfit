@@ -1116,6 +1116,14 @@ body.coach-active .tabbar { display: none; }
   -webkit-user-select: none; user-select: none;
 }
 .chat-copy:active { background: rgba(56,189,248,0.28); }
+
+/* Tasto "Fai analizzare al coach" nell'editor dello storico */
+.coach-analyze-btn {
+  margin-top: 10px; width: 100%;
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9); color: #04222e;
+  font-weight: 700; border: none;
+}
+.coach-analyze-btn:active { filter: brightness(0.95); }
 .chat-inputbar {
   flex-shrink: 0; display: flex; gap: 8px; align-items: flex-end;
   padding: 10px 12px calc(env(safe-area-inset-bottom) + 10px);
