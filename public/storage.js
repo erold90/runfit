@@ -188,6 +188,8 @@ export function coachContext(focusSession = null) {
     // Distribuzione del tempo nelle zone cardiache (secondi): quadro completo
     // dell'intensità reale della sessione, non solo Z2/Z3.
     timeInZoneSec: s.timeInZoneSec,
+    // FC media per km (parziali): la SEQUENZA dell'intensità durante la corsa.
+    hrPerKm: s.hrPerKm,
     completedSets: s.completedSets, totalSets: s.totalSets,
     completedSetsLog: (detailed && s.type === 'strength') ? s.completedSetsLog : undefined,
     notes: s.notes || undefined,

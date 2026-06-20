@@ -867,6 +867,7 @@ function showFeedbackForm(session, interrupted = false) {
     activeKcal: '',
     km: '', paceMinPerKm: '',
     timeZ1: '', timeZ2: '', timeZ3: '', timeZ4: '', timeZ5: '',
+    hrPerKm: '',
     cadence: '', strideM: '',
     elevationGain: '',
     verticalOsc: '', groundContact: '',
@@ -922,6 +923,14 @@ function showFeedbackForm(session, interrupted = false) {
     fieldWrap('Oscillaz. vert.', numInput('verticalOsc', '8.5', { step: '0.1' }), 'cm'),
     fieldWrap('Tempo a terra', numInput('groundContact', '280', { type: 'number', inputmode: 'numeric', step: '1' }), 'ms'),
     fieldWrap('Potenza media', numInput('runningPowerW', '220', { type: 'number', inputmode: 'numeric', step: '1' }), 'W'),
+    // FC per km (parziali Apple Watch) — campo a tutta larghezza
+    el('div', { class: 'field-mini', style: 'grid-column: 1 / -1' },
+      el('label', { class: 'field-mini-label' }, 'FC per km (parziali)'),
+      el('div', { class: 'field-mini-input' },
+        numInput('hrPerKm', 'es. 99,140,153,143,112', { type: 'text', inputmode: 'decimal' }),
+        el('span', { class: 'field-mini-unit' }, 'bpm'),
+      ),
+    ),
   );
   const advancedToggle = el('button', {
     class: 'advanced-toggle',
@@ -987,6 +996,7 @@ function showFeedbackForm(session, interrupted = false) {
           z4: parsePaceToSec(state.timeZ4),
           z5: parsePaceToSec(state.timeZ5),
         },
+        hrPerKm: parseHrPerKm(state.hrPerKm),
         cadence: parseIntOrNull(state.cadence),
         strideM: parseFloatOrNull(state.strideM),
         elevationGain: parseIntOrNull(state.elevationGain),
@@ -1057,6 +1067,19 @@ function minToSec(min) {
   return min == null ? null : Math.round(min * 60);
 }
 
+// "FC per km": lista di battiti separati da virgole (es. "99,140,153,143,112")
+// → array di interi. Il coach legge la sequenza per giudicare il pacing.
+function parseHrPerKm(str) {
+  if (!str) return null;
+  const arr = String(str).split(/[,;\s]+/)
+    .map(x => parseInt(x.trim(), 10))
+    .filter(n => Number.isFinite(n) && n > 30 && n <= 240);
+  return arr.length ? arr : null;
+}
+function hrPerKmToStr(arr) {
+  return Array.isArray(arr) && arr.length ? arr.join(',') : '';
+}
+
 // Secondi → "mm:ss" (es. 279 → "4:39"); '' se null. Per i tempi in zona usiamo
 // lo STESSO parser del passo (parsePaceToSec): "4,39" / "4.39" / "4:39" = 4:39.
 function secToMinSec(sec) {
@@ -1079,7 +1102,7 @@ function saveFeedbackAndAdvance(args) {
   const {
     session, completion, interrupted,
     rpe, avgHr, maxHr, activeKcal,
-    km, paceSecPerKm, timeInZoneSec,
+    km, paceSecPerKm, timeInZoneSec, hrPerKm,
     cadence, strideM, elevationGain,
     verticalOsc, groundContact, runningPowerW,
     notes,
@@ -1135,7 +1158,8 @@ function saveFeedbackAndAdvance(args) {
     paceSecPerKm,         // secondi/km
     elevationGain,
     // Apple Watch — tempo in zone
-    timeInZoneSec,        // { z2, z3 }
+    timeInZoneSec,        // { z1..z5 }
+    hrPerKm,              // [bpm] per km (parziali)
     // Apple Watch — forma di corsa
     cadence, strideM, verticalOsc, groundContact, runningPowerW,
     // Calorie
@@ -2540,6 +2564,7 @@ function showSessionEditor(s) {
     timeZ3: s.timeInZoneSec?.z3 != null ? secToMinSec(s.timeInZoneSec.z3) : '',
     timeZ4: s.timeInZoneSec?.z4 != null ? secToMinSec(s.timeInZoneSec.z4) : '',
     timeZ5: s.timeInZoneSec?.z5 != null ? secToMinSec(s.timeInZoneSec.z5) : '',
+    hrPerKm: hrPerKmToStr(s.hrPerKm),
     notes: s.notes || '',
   };
 
@@ -2651,6 +2676,13 @@ function showSessionEditor(s) {
     fieldWrap('Tempo Z3', numInput('timeZ3', { type: 'text', inputmode: 'decimal' }), 'min:sec'),
     fieldWrap('Tempo Z4', numInput('timeZ4', { type: 'text', inputmode: 'decimal' }), 'min:sec'),
     fieldWrap('Tempo Z5', numInput('timeZ5', { type: 'text', inputmode: 'decimal' }), 'min:sec'),
+    el('div', { class: 'field-mini', style: 'grid-column: 1 / -1' },
+      el('label', { class: 'field-mini-label' }, 'FC per km (parziali)'),
+      el('div', { class: 'field-mini-input' },
+        numInput('hrPerKm', { type: 'text', inputmode: 'decimal' }),
+        el('span', { class: 'field-mini-unit' }, 'bpm'),
+      ),
+    ),
   );
   let optionalSection = null;
   if (optionalGrid) {
@@ -2759,6 +2791,7 @@ function recomputeSessionRecord(orig, st, repsLog = null) {
       z4: parsePaceToSec(st.timeZ4),
       z5: parsePaceToSec(st.timeZ5),
     },
+    hrPerKm: parseHrPerKm(st.hrPerKm),
     kcal, kcalSource,
     // Reps modificate (se passate): aggiorna il log e ricaches il numero di serie completate
     ...(repsLog ? { completedSetsLog: repsLog, completedSets: repsLog.length } : {}),

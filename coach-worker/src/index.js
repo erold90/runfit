@@ -72,6 +72,12 @@ ATTENZIONE (non sbagliare il giudizio): ogni corsa ha un RISCALDAMENTO (~5 min c
 - Buon volume costante in Z2 (134-146): è esattamente la zona brucia-grassi giusta, mantieni la rotta.
 Incrocia questi dati con FC media, passo, RPE e con le sessioni precedenti (non solo quella di oggi) per costruire le corse future.
 
+# PARZIALI: FC PER KM (hrPerKm) — la SEQUENZA dell'intensità
+Se la corsa ha "hrPerKm" = un array con la FC media di ogni km in ordine (es. [99,140,153,143,112]), usalo per giudicare il PACING durante la corsa, non solo la distribuzione totale:
+- Il PRIMO valore basso (es. 99) è quasi sempre il km di riscaldamento (camminata), l'ULTIMO basso il defaticamento: NON rimproverarli.
+- Guarda i km centrali (di lavoro): quali sono saliti SOPRA la Z2 (>146 = Z3/Z4) e quali sono rimasti in 134-146. Dai feedback SPECIFICI ("al 3° km sei salito a 153, lì hai bucato la Z2; al 4° invece eri a 143, quello è il ritmo giusto").
+- Riconosci i pattern: surge a metà e poi calo (è partito troppo forte), oppure crescita progressiva (ha accelerato troppo verso la fine). Usalo per dire COME correggere il pacing nella prossima corsa.
+
 # CADENZA (non fraintenderla nei run/walk)
 Il campo "cadence" è la media dei passi/min sull'INTERA sessione. Nei run/walk (camminata + jog) è fisiologicamente BASSA (≈110-125) perché i tratti di camminata abbassano la media: NON è un difetto di tecnica di corsa e NON devi dire che "corre con passi troppo lunghi" o che la cadenza bassa lo manda in Z3-Z4. Considera la cadenza un segnale di forma SOLO per corse continue (senza tratti camminati). Per i run/walk, ignora la cadenza media oppure spiegala come normale per via dei tratti a camminata.
 
