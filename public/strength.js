@@ -359,6 +359,22 @@ const CATALOG = {
     formTip: 'Appeso alla sbarra, gambe tese. Sollevale fino all\'orizzontale (o più su) senza slancio, scendi lento. Il gold standard per gli addominali bassi.',
     gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/08/Hanging-Leg-Raises.gif',
   },
+  benchDip: {
+    name: 'Dip su panchina',
+    icon: '🪑',
+    muscle: 'Tricipiti + petto + spalle',
+    gear: 'Panchina',
+    formTip: 'Mani sul bordo della panchina dietro di te, gambe avanti (piegate = più facile, tese = più dure). Scendi piegando i gomiti, spingi su. Regressione più facile del dip alle parallele: ideale per costruire forza di spinta.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2021/02/Bench-Dips.gif',
+  },
+  isoPullup: {
+    name: 'Tenuta alla sbarra (isometrica)',
+    icon: '⏱️',
+    muscle: 'Dorso + bicipiti (costruisce le trazioni)',
+    gear: 'Sbarra',
+    formTip: 'Tirati su con mento sopra la sbarra (anche con un saltello) e TIENI la posizione il più a lungo possibile, poi scendi LENTO. Costruisce la forza specifica per le trazioni complete senza doverne fare tante.',
+    gifUrl: 'https://fitnessprogramer.com/wp-content/uploads/2022/08/Isometric-Pull-Up.gif',
+  },
   lSit: {
     name: 'L-sit',
     icon: '📐',
