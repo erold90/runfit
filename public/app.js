@@ -913,8 +913,8 @@ function showFeedbackForm(session, interrupted = false) {
   const advancedContent = el('div', { class: 'feedback-grid advanced-grid' },
     fieldWrap('Dislivello', numInput('elevationGain', '12', { type: 'number', inputmode: 'numeric', step: '1' }), 'm'),
     fieldWrap('Cadenza media', numInput('cadence', '165', { type: 'number', inputmode: 'numeric', step: '1' }), 'spm'),
-    fieldWrap('Tempo Z2', numInput('timeZ2', '8', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
-    fieldWrap('Tempo Z3', numInput('timeZ3', '5', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+    fieldWrap('Tempo Z2', numInput('timeZ2', 'es. 4:39', { type: 'text', inputmode: 'text' }), 'min:sec'),
+    fieldWrap('Tempo Z3', numInput('timeZ3', 'es. 6:08', { type: 'text', inputmode: 'text' }), 'min:sec'),
     fieldWrap('Lunghezza passo', numInput('strideM', '1.05', { step: '0.01' }), 'm'),
     fieldWrap('Oscillaz. vert.', numInput('verticalOsc', '8.5', { step: '0.1' }), 'cm'),
     fieldWrap('Tempo a terra', numInput('groundContact', '280', { type: 'number', inputmode: 'numeric', step: '1' }), 'ms'),
@@ -978,8 +978,8 @@ function showFeedbackForm(session, interrupted = false) {
         km: parseFloatOrNull(state.km),
         paceSecPerKm: parsePaceToSec(state.paceMinPerKm),
         timeInZoneSec: {
-          z2: minToSec(parseFloatOrNull(state.timeZ2)),
-          z3: minToSec(parseFloatOrNull(state.timeZ3)),
+          z2: parseMinSecToSec(state.timeZ2),
+          z3: parseMinSecToSec(state.timeZ3),
         },
         cadence: parseIntOrNull(state.cadence),
         strideM: parseFloatOrNull(state.strideM),
@@ -1049,6 +1049,31 @@ function parseFloatOrNull(v) {
 
 function minToSec(min) {
   return min == null ? null : Math.round(min * 60);
+}
+
+// Converte un input "mm:ss" (es. "4:39") in secondi. Accetta anche solo minuti
+// ("5" = 5 min) o minuti decimali ("4,5"). Ritorna null se vuoto/non valido.
+function parseMinSecToSec(str) {
+  if (str == null) return null;
+  const s = String(str).trim();
+  if (!s) return null;
+  if (s.includes(':')) {
+    const [mPart, sPart = '0'] = s.split(':');
+    const mm = parseInt(mPart, 10);
+    const ss = parseInt(sPart, 10);
+    if (isNaN(mm) && isNaN(ss)) return null;
+    return (isNaN(mm) ? 0 : mm) * 60 + Math.min(59, isNaN(ss) ? 0 : ss);
+  }
+  const v = parseFloat(s.replace(',', '.'));
+  return isNaN(v) ? null : Math.round(v * 60);
+}
+
+// Secondi → "mm:ss" (es. 279 → "4:39"); '' se null.
+function secToMinSec(sec) {
+  if (sec == null) return '';
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function rpeText(v) {
@@ -2465,8 +2490,8 @@ function showSessionEditor(s) {
     elevationGain: s.elevationGain != null ? String(s.elevationGain) : '',
     cadence: s.cadence != null ? String(s.cadence) : '',
     strideM: s.strideM != null ? String(s.strideM) : '',
-    timeZ2: s.timeInZoneSec?.z2 != null ? String(Math.round(s.timeInZoneSec.z2 / 60)) : '',
-    timeZ3: s.timeInZoneSec?.z3 != null ? String(Math.round(s.timeInZoneSec.z3 / 60)) : '',
+    timeZ2: s.timeInZoneSec?.z2 != null ? secToMinSec(s.timeInZoneSec.z2) : '',
+    timeZ3: s.timeInZoneSec?.z3 != null ? secToMinSec(s.timeInZoneSec.z3) : '',
     notes: s.notes || '',
   };
 
@@ -2573,8 +2598,8 @@ function showSessionEditor(s) {
   const optionalGrid = isStrength ? null : el('div', { class: 'feedback-grid advanced-grid' },
     fieldWrap('Dislivello', numInput('elevationGain', { type: 'number', inputmode: 'numeric', step: '1' }), 'm'),
     fieldWrap('Cadenza', numInput('cadence', { type: 'number', inputmode: 'numeric', step: '1' }), 'spm'),
-    fieldWrap('Tempo Z2', numInput('timeZ2', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
-    fieldWrap('Tempo Z3', numInput('timeZ3', { type: 'number', inputmode: 'numeric', step: '1' }), 'min'),
+    fieldWrap('Tempo Z2', numInput('timeZ2', { type: 'text', inputmode: 'text' }), 'min:sec'),
+    fieldWrap('Tempo Z3', numInput('timeZ3', { type: 'text', inputmode: 'text' }), 'min:sec'),
   );
   let optionalSection = null;
   if (optionalGrid) {
@@ -2667,8 +2692,8 @@ function recomputeSessionRecord(orig, st, repsLog = null) {
     cadence: parseIntOrNull(st.cadence),
     strideM: parseFloatOrNull(st.strideM),
     timeInZoneSec: {
-      z2: minToSec(parseFloatOrNull(st.timeZ2)),
-      z3: minToSec(parseFloatOrNull(st.timeZ3)),
+      z2: parseMinSecToSec(st.timeZ2),
+      z3: parseMinSecToSec(st.timeZ3),
     },
     kcal, kcalSource,
     // Reps modificate (se passate): aggiorna il log e ricaches il numero di serie completate
@@ -2826,14 +2851,15 @@ function renderStats() {
     else if (weights.length === 1) container.appendChild(bigStat('Peso', `${weights[0].kg.toFixed(1)} kg`,
       `Target ${profile.weightTargetKg} kg. Registra il peso più volte per il trend.`));
 
-    // Zona 2 (solo corse)
+    // Zona 2 (solo corse) — range Karvonen reale, calcolato sui tuoi dati
+    const z2r = getZones().z2;
     const byWeekZ2 = {};
     runSessions.filter(s => s.timeInZoneSec?.z2).forEach(s => { byWeekZ2[s.week] = (byWeekZ2[s.week] || 0) + s.timeInZoneSec.z2 / 60; });
     const z2Weeks = Object.keys(byWeekZ2);
     if (z2Weeks.length >= 2) container.appendChild(chartCard('Volume Zona 2 per settimana (min)', 'chart-z2',
-      'Tempo nella zona 110-128 bpm: la zona regina per bruciare grasso.'));
+      `Tempo nella zona ${z2r.min}-${z2r.max} bpm: la zona regina per bruciare grasso.`));
     else if (z2Weeks.length === 1) container.appendChild(bigStat('Zona 2 questa settimana', `${Math.round(byWeekZ2[z2Weeks[0]])} min`,
-      'Minuti nella zona brucia-grassi (110-128 bpm). Il confronto arriva la prossima settimana.'));
+      `Minuti nella zona brucia-grassi (${z2r.min}-${z2r.max} bpm). Il confronto arriva la prossima settimana.`));
 
     // Volume corsa settimanale
     const byWeekMin = {};

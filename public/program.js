@@ -330,7 +330,7 @@ export function buildSessionD(weekIndex) {
   const useJog = weekIndex >= 5;
   const middle = useJog
     ? [jog(z2Minutes, 0, `Corsa lenta in Zona 2 per ${z2Minutes} minuti. Ritmo da chiacchierata completa, ${'massima ossidazione dei grassi'}.`)]
-    : [brisk(z2Minutes, 0, `Cammina veloce in Zona 2 per ${z2Minutes} minuti. Frequenza cardiaca 110-128 bpm.`)];
+    : [brisk(z2Minutes, 0, `Cammina veloce in Zona 2 per ${z2Minutes} minuti. Tieni la frequenza cardiaca nella tua Zona 2 (vedi il target a schermo).`)];
   const phases = [warmup(5), ...middle, cooldown(5)];
   const totalSeconds = phases.reduce((s, p) => s + p.seconds, 0);
   return {
