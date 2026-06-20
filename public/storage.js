@@ -187,7 +187,10 @@ export function coachContext() {
       type: s.type, title: s.title, week: s.week, completedAt: s.completedAt,
       when: relativeDay(s.completedAt), // "oggi" | "ieri" | "N giorni fa"
       rpe: s.rpe, durationMin: s.durationMin, avgHr: s.avgHr, maxHr: s.maxHr, kcal: s.kcal,
-      km: s.km, paceSecPerKm: s.paceSecPerKm,
+      km: s.km, paceSecPerKm: s.paceSecPerKm, cadence: s.cadence,
+      // Distribuzione del tempo nelle zone cardiache (secondi): quadro completo
+      // dell'intensità reale della sessione, non solo Z2/Z3.
+      timeInZoneSec: s.timeInZoneSec,
       completedSets: s.completedSets, totalSets: s.totalSets,
       completedSetsLog: (detailed && s.type === 'strength') ? s.completedSetsLog : undefined,
       notes: s.notes || undefined,

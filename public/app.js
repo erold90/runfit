@@ -866,7 +866,7 @@ function showFeedbackForm(session, interrupted = false) {
     avgHr: '', maxHr: '',
     activeKcal: '',
     km: '', paceMinPerKm: '',
-    timeZ2: '', timeZ3: '',
+    timeZ1: '', timeZ2: '', timeZ3: '', timeZ4: '', timeZ5: '',
     cadence: '', strideM: '',
     elevationGain: '',
     verticalOsc: '', groundContact: '',
@@ -913,8 +913,11 @@ function showFeedbackForm(session, interrupted = false) {
   const advancedContent = el('div', { class: 'feedback-grid advanced-grid' },
     fieldWrap('Dislivello', numInput('elevationGain', '12', { type: 'number', inputmode: 'numeric', step: '1' }), 'm'),
     fieldWrap('Cadenza media', numInput('cadence', '165', { type: 'number', inputmode: 'numeric', step: '1' }), 'spm'),
-    fieldWrap('Tempo Z2', numInput('timeZ2', 'es. 4:39', { type: 'text', inputmode: 'text' }), 'min:sec'),
-    fieldWrap('Tempo Z3', numInput('timeZ3', 'es. 6:08', { type: 'text', inputmode: 'text' }), 'min:sec'),
+    fieldWrap('Tempo Z1', numInput('timeZ1', 'es. 20:25', { type: 'text', inputmode: 'decimal', pattern: '[0-9:.,]*' }), 'min:sec'),
+    fieldWrap('Tempo Z2', numInput('timeZ2', 'es. 4:39', { type: 'text', inputmode: 'decimal', pattern: '[0-9:.,]*' }), 'min:sec'),
+    fieldWrap('Tempo Z3', numInput('timeZ3', 'es. 6:08', { type: 'text', inputmode: 'decimal', pattern: '[0-9:.,]*' }), 'min:sec'),
+    fieldWrap('Tempo Z4', numInput('timeZ4', 'es. 6:46', { type: 'text', inputmode: 'decimal', pattern: '[0-9:.,]*' }), 'min:sec'),
+    fieldWrap('Tempo Z5', numInput('timeZ5', 'es. 0:00', { type: 'text', inputmode: 'decimal', pattern: '[0-9:.,]*' }), 'min:sec'),
     fieldWrap('Lunghezza passo', numInput('strideM', '1.05', { step: '0.01' }), 'm'),
     fieldWrap('Oscillaz. vert.', numInput('verticalOsc', '8.5', { step: '0.1' }), 'cm'),
     fieldWrap('Tempo a terra', numInput('groundContact', '280', { type: 'number', inputmode: 'numeric', step: '1' }), 'ms'),
@@ -978,8 +981,11 @@ function showFeedbackForm(session, interrupted = false) {
         km: parseFloatOrNull(state.km),
         paceSecPerKm: parsePaceToSec(state.paceMinPerKm),
         timeInZoneSec: {
-          z2: parseMinSecToSec(state.timeZ2),
-          z3: parseMinSecToSec(state.timeZ3),
+          z1: parsePaceToSec(state.timeZ1),
+          z2: parsePaceToSec(state.timeZ2),
+          z3: parsePaceToSec(state.timeZ3),
+          z4: parsePaceToSec(state.timeZ4),
+          z5: parsePaceToSec(state.timeZ5),
         },
         cadence: parseIntOrNull(state.cadence),
         strideM: parseFloatOrNull(state.strideM),
@@ -1051,24 +1057,8 @@ function minToSec(min) {
   return min == null ? null : Math.round(min * 60);
 }
 
-// Converte un input "mm:ss" (es. "4:39") in secondi. Accetta anche solo minuti
-// ("5" = 5 min) o minuti decimali ("4,5"). Ritorna null se vuoto/non valido.
-function parseMinSecToSec(str) {
-  if (str == null) return null;
-  const s = String(str).trim();
-  if (!s) return null;
-  if (s.includes(':')) {
-    const [mPart, sPart = '0'] = s.split(':');
-    const mm = parseInt(mPart, 10);
-    const ss = parseInt(sPart, 10);
-    if (isNaN(mm) && isNaN(ss)) return null;
-    return (isNaN(mm) ? 0 : mm) * 60 + Math.min(59, isNaN(ss) ? 0 : ss);
-  }
-  const v = parseFloat(s.replace(',', '.'));
-  return isNaN(v) ? null : Math.round(v * 60);
-}
-
-// Secondi → "mm:ss" (es. 279 → "4:39"); '' se null.
+// Secondi → "mm:ss" (es. 279 → "4:39"); '' se null. Per i tempi in zona usiamo
+// lo STESSO parser del passo (parsePaceToSec): "4,39" / "4.39" / "4:39" = 4:39.
 function secToMinSec(sec) {
   if (sec == null) return '';
   const m = Math.floor(sec / 60);
@@ -2490,8 +2480,11 @@ function showSessionEditor(s) {
     elevationGain: s.elevationGain != null ? String(s.elevationGain) : '',
     cadence: s.cadence != null ? String(s.cadence) : '',
     strideM: s.strideM != null ? String(s.strideM) : '',
+    timeZ1: s.timeInZoneSec?.z1 != null ? secToMinSec(s.timeInZoneSec.z1) : '',
     timeZ2: s.timeInZoneSec?.z2 != null ? secToMinSec(s.timeInZoneSec.z2) : '',
     timeZ3: s.timeInZoneSec?.z3 != null ? secToMinSec(s.timeInZoneSec.z3) : '',
+    timeZ4: s.timeInZoneSec?.z4 != null ? secToMinSec(s.timeInZoneSec.z4) : '',
+    timeZ5: s.timeInZoneSec?.z5 != null ? secToMinSec(s.timeInZoneSec.z5) : '',
     notes: s.notes || '',
   };
 
@@ -2598,8 +2591,11 @@ function showSessionEditor(s) {
   const optionalGrid = isStrength ? null : el('div', { class: 'feedback-grid advanced-grid' },
     fieldWrap('Dislivello', numInput('elevationGain', { type: 'number', inputmode: 'numeric', step: '1' }), 'm'),
     fieldWrap('Cadenza', numInput('cadence', { type: 'number', inputmode: 'numeric', step: '1' }), 'spm'),
-    fieldWrap('Tempo Z2', numInput('timeZ2', { type: 'text', inputmode: 'text' }), 'min:sec'),
-    fieldWrap('Tempo Z3', numInput('timeZ3', { type: 'text', inputmode: 'text' }), 'min:sec'),
+    fieldWrap('Tempo Z1', numInput('timeZ1', { type: 'text', inputmode: 'decimal' }), 'min:sec'),
+    fieldWrap('Tempo Z2', numInput('timeZ2', { type: 'text', inputmode: 'decimal' }), 'min:sec'),
+    fieldWrap('Tempo Z3', numInput('timeZ3', { type: 'text', inputmode: 'decimal' }), 'min:sec'),
+    fieldWrap('Tempo Z4', numInput('timeZ4', { type: 'text', inputmode: 'decimal' }), 'min:sec'),
+    fieldWrap('Tempo Z5', numInput('timeZ5', { type: 'text', inputmode: 'decimal' }), 'min:sec'),
   );
   let optionalSection = null;
   if (optionalGrid) {
@@ -2692,8 +2688,11 @@ function recomputeSessionRecord(orig, st, repsLog = null) {
     cadence: parseIntOrNull(st.cadence),
     strideM: parseFloatOrNull(st.strideM),
     timeInZoneSec: {
-      z2: parseMinSecToSec(st.timeZ2),
-      z3: parseMinSecToSec(st.timeZ3),
+      z1: parsePaceToSec(st.timeZ1),
+      z2: parsePaceToSec(st.timeZ2),
+      z3: parsePaceToSec(st.timeZ3),
+      z4: parsePaceToSec(st.timeZ4),
+      z5: parsePaceToSec(st.timeZ5),
     },
     kcal, kcalSource,
     // Reps modificate (se passate): aggiorna il log e ricaches il numero di serie completate

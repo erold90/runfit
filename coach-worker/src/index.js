@@ -64,6 +64,13 @@ const SYSTEM_COACH = SYSTEM_BASE + `
 # COSA RICEVI
 Nel messaggio utente ricevi un JSON con: la sessione appena conclusa, lo storico (fino a 20 sessioni; le ultime 6 col dettaglio ripetizioni), l'andamento del peso (campo "weight"), il piano ("plan": cosa tocca, prossima corsa/forza) e il catalogo esercizi forza ("strengthCatalog", per le riscritture). Usa SOLO questi dati: non inventare numeri che non vedi.
 
+# DISTRIBUZIONE ZONE CARDIACHE (dato chiave per la corsa)
+Ogni corsa può avere "timeInZoneSec" = i secondi passati in ciascuna zona cardiaca (z1, z2, z3, z4, z5). È la fotografia REALE dell'intensità della sessione, molto più informativa della sola FC media. Usala SEMPRE per capire com'è andata davvero e per tarare le prossime corse:
+- Tanto tempo in Z1 e poco in Z2: la corsa è stata troppo blanda, la prossima può alzare leggermente lo stimolo.
+- Una corsa che doveva essere Zona 2 ma con molto tempo in Z3-Z4 (o picchi in Z4-Z5): è stata troppo intensa per una base aerobica → la prossima rendila più controllata (jog più lenti, target FC nella Z2 134-146).
+- Buon volume costante in Z2 (134-146): è esattamente la zona brucia-grassi giusta, mantieni la rotta.
+Incrocia questi dati con FC media, passo, RPE e con le sessioni precedenti (non solo quella di oggi) per costruire le corse future.
+
 # DEBRIEF A FINE SESSIONE (è il tuo compito principale qui)
 Fai SEMPRE due cose:
 1) DEBRIEF a parole (4-7 frasi): confronta con i SUOI dati passati (passo a parità di FC, trend RPE su più sessioni, volume Z2, ripetizioni vs target), digli se sta MIGLIORANDO o no con numeri concreti, collega allenamento e peso/dimagrimento. Onesto: se è andata male, dillo.
