@@ -11,6 +11,7 @@ import {
   getProgress, saveProgress,
   getSessions, saveSession, deleteSession, updateSession,
   getWeights, addWeight,
+  getMeasurements, saveMeasurement, deleteMeasurement,
   getSettings, saveSettings,
   getAssessment, saveAssessment,
   exportAllJson, importAllJson,
@@ -3226,6 +3227,194 @@ function drawCharts(sessions, mode = 'run') {
 }
 
 // --- View: Profilo --------------------------------------------------------
+// ============================================================================
+// MISURAZIONI — pliche (Jackson-Pollock 3 siti) + circonferenze (Navy, WHtR)
+// ============================================================================
+// Siti pliche a 3 dipendenti dal sesso. Formule Jackson-Pollock/Siri e US Navy
+// (fatti scientifici pubblici, non valore assoluto: servono al TREND).
+const SKINFOLD_SITES = {
+  M: [
+    { key: 's1', label: 'Petto', hint: 'Piega diagonale, a metà tra ascella e capezzolo' },
+    { key: 's2', label: 'Addome', hint: 'Piega verticale, ~2 cm a lato dell\'ombelico' },
+    { key: 's3', label: 'Coscia', hint: 'Piega verticale, a metà tra inguine e rotula, davanti' },
+  ],
+  F: [
+    { key: 's1', label: 'Tricipite', hint: 'Piega verticale, dietro il braccio, a metà spalla-gomito' },
+    { key: 's2', label: 'Sovrailiaca', hint: 'Piega diagonale, sopra la cresta iliaca (fianco)' },
+    { key: 's3', label: 'Coscia', hint: 'Piega verticale, a metà tra inguine e rotula, davanti' },
+  ],
+};
+const CIRC_SITES = [
+  { key: 'waist', label: 'Vita', hint: 'All\'ombelico, rilassato — la più importante' },
+  { key: 'neck', label: 'Collo', hint: 'Sotto il pomo d\'Adamo (serve al Navy)' },
+  { key: 'hip', label: 'Fianchi', hint: 'Punto più largo dei glutei' },
+  { key: 'chest', label: 'Petto', hint: 'All\'altezza dei capezzoli, respiro neutro' },
+  { key: 'arm', label: 'Braccio', hint: 'Bicipite contratto, punto più grosso' },
+  { key: 'thigh', label: 'Coscia', hint: 'Punto più largo, sotto il gluteo' },
+  { key: 'calf', label: 'Polpaccio', hint: 'Punto più largo' },
+];
+
+function bfSkinfold3(sum, sex, age) {
+  if (!sum || sum <= 0 || !age) return null;
+  const bd = sex === 'F'
+    ? 1.0994921 - 0.0009929 * sum + 0.0000023 * sum * sum - 0.0001392 * age
+    : 1.10938 - 0.0008267 * sum + 0.0000016 * sum * sum - 0.0002574 * age;
+  const bf = 495 / bd - 450;
+  return bf > 2 && bf < 60 ? bf : null;
+}
+function bfNavy(circ, sex, heightCm) {
+  const neck = parseFloat(circ.neck), waist = parseFloat(circ.waist), hip = parseFloat(circ.hip);
+  if (!neck || !waist || !heightCm) return null;
+  let bf;
+  if (sex === 'F') {
+    if (!hip || waist + hip - neck <= 0) return null;
+    bf = 495 / (1.29579 - 0.35004 * Math.log10(waist + hip - neck) + 0.22100 * Math.log10(heightCm)) - 450;
+  } else {
+    if (waist - neck <= 0) return null;
+    bf = 495 / (1.0324 - 0.19077 * Math.log10(waist - neck) + 0.15456 * Math.log10(heightCm)) - 450;
+  }
+  return bf > 2 && bf < 60 ? bf : null;
+}
+function computeMeasurement(raw, profile) {
+  const sex = profile.isMale ? 'M' : 'F';
+  const age = getAge();
+  const h = profile.heightCm || 178;
+  const sf = raw.skinfolds || {};
+  const sum = ['s1', 's2', 's3'].reduce((a, k) => a + (parseFloat(sf[k]) || 0), 0);
+  const circ = raw.circumferences || {};
+  const waist = parseFloat(circ.waist) || null;
+  const hip = parseFloat(circ.hip) || null;
+  return {
+    sumSkinfold: sum || null,
+    bfSkinfold: bfSkinfold3(sum, sex, age),
+    bfNavy: bfNavy(circ, sex, h),
+    whtr: waist ? waist / h : null,
+    whr: (waist && hip) ? waist / hip : null,
+  };
+}
+
+function renderMeasurements() {
+  const container = $('#view-profile');
+  container.innerHTML = '';
+  const profile = getProfile();
+  const sex = profile.isMale ? 'M' : 'F';
+  const list = getMeasurements();
+  const st = { skinfolds: {}, circumferences: {}, weightKg: profile.weightCurrentKg || '' };
+  const waistTarget = Math.round((profile.heightCm || 178) * 0.5);
+
+  container.appendChild(el('div', { class: 'editor-topbar' },
+    el('button', { class: 'btn btn-ghost btn-back', onclick: () => renderProfile() }, '‹ Profilo'),
+    el('div', { class: 'editor-title' }, '📏 Misurazioni'),
+  ));
+  container.appendChild(el('div', { class: 'feedback-hint', style: 'margin: 0 4px 12px' },
+    'Misura al mattino a digiuno, sempre lato destro, marcando le sedi. Conta il TREND nel tempo, non il singolo dato.'));
+
+  // Risultati live
+  const resNavy = el('div', { class: 'kpi-value' }, '—');
+  const resSkin = el('div', { class: 'kpi-value' }, '—');
+  const resWhtr = el('div', { class: 'kpi-value' }, '—');
+  const whtrHint = el('div', { class: 'chart-hint' }, `target < 0,50`);
+  const recompute = () => {
+    const c = computeMeasurement(st, profile);
+    resNavy.textContent = c.bfNavy != null ? `${c.bfNavy.toFixed(1)}%` : '—';
+    resSkin.textContent = c.bfSkinfold != null ? `${c.bfSkinfold.toFixed(1)}%` : '—';
+    resWhtr.textContent = c.whtr != null ? c.whtr.toFixed(2) : '—';
+    whtrHint.textContent = c.whtr == null ? `target < 0,50 (vita < ${waistTarget} cm)`
+      : (c.whtr < 0.5 ? '✓ sotto 0,50 — ottimo' : `sopra 0,50 (target vita < ${waistTarget} cm)`);
+  };
+
+  const numField = (obj, key, label, unit, hint) => {
+    const i = el('input', { type: 'text', inputmode: 'decimal', class: 'feedback-input' });
+    i.addEventListener('input', e => { obj[key] = e.target.value; recompute(); });
+    return el('div', { class: 'field-mini', style: 'grid-column: 1 / -1' },
+      el('label', { class: 'field-mini-label' }, label),
+      el('div', { class: 'field-mini-input' }, i, el('span', { class: 'field-mini-unit' }, unit)),
+      hint ? el('div', { class: 'chart-hint', style: 'margin-top:3px' }, hint) : null,
+    );
+  };
+
+  container.appendChild(el('div', { class: 'card' },
+    el('div', { class: 'card-label' }, 'Circonferenze (cm)'),
+    el('div', { class: 'feedback-grid' }, ...CIRC_SITES.map(s => numField(st.circumferences, s.key, s.label, 'cm', s.hint))),
+  ));
+  container.appendChild(el('div', { class: 'card' },
+    el('div', { class: 'card-label' }, `Pliche — 3 siti (mm)${sex === 'F' ? ' · donna' : ''}`),
+    el('div', { class: 'feedback-grid' }, ...SKINFOLD_SITES[sex].map(s => numField(st.skinfolds, s.key, s.label, 'mm', s.hint))),
+  ));
+  const wField = el('input', { type: 'text', inputmode: 'decimal', class: 'feedback-input', value: st.weightKg || '' });
+  wField.addEventListener('input', e => { st.weightKg = e.target.value; });
+  container.appendChild(el('div', { class: 'card' }, fieldWrap('Peso', wField, 'kg')));
+
+  container.appendChild(el('div', { class: 'card' },
+    el('div', { class: 'card-label' }, 'Stima corrente'),
+    el('div', { class: 'kpi-grid' },
+      el('div', { class: 'kpi' }, resNavy, el('div', { class: 'kpi-label' }, '% grasso (Navy)')),
+      el('div', { class: 'kpi' }, resSkin, el('div', { class: 'kpi-label' }, '% grasso (pliche)')),
+      el('div', { class: 'kpi' }, resWhtr, el('div', { class: 'kpi-label' }, 'Vita/altezza'), whtrHint),
+    ),
+  ));
+
+  container.appendChild(el('button', { class: 'btn btn-primary btn-block', onclick: () => {
+    const c = computeMeasurement(st, profile);
+    if (!(c.sumSkinfold || c.whtr || c.bfNavy)) { toast('Inserisci almeno la vita o le pliche'); return; }
+    const record = {
+      id: 'm-' + Date.now(), date: new Date().toISOString(),
+      skinfolds: { ...st.skinfolds }, circumferences: { ...st.circumferences },
+      weightKg: parseFloatOrNull(st.weightKg), ...c,
+    };
+    saveMeasurement(record);
+    if (record.weightKg) addWeight(record.weightKg);
+    toast('Misurazione salvata ✓');
+    renderMeasurements();
+  } }, '💾 Salva misurazione'));
+
+  if (list.length) {
+    container.appendChild(el('div', { class: 'card' },
+      el('div', { class: 'card-label' }, `Storico (${list.length})`),
+      el('div', { class: 'meas-history' },
+        ...[...list].reverse().map(m => el('div', { class: 'meas-row' },
+          el('div', {},
+            el('div', { class: 'meas-date' }, fmtDate(m.date)),
+            el('div', { class: 'meas-vals' },
+              [m.circumferences?.waist ? `vita ${m.circumferences.waist}` : null,
+               m.whtr != null ? `WHtR ${m.whtr.toFixed(2)}` : null,
+               m.bfNavy != null ? `Navy ${m.bfNavy.toFixed(1)}%` : null,
+               m.bfSkinfold != null ? `pliche ${m.bfSkinfold.toFixed(1)}%` : null,
+               m.weightKg != null ? `${m.weightKg}kg` : null].filter(Boolean).join(' · ')),
+          ),
+          el('button', { class: 'icon-btn', onclick: () => {
+            if (confirm('Eliminare questa misurazione?')) { deleteMeasurement(m.id); renderMeasurements(); }
+          } }, '🗑'),
+        )),
+      ),
+    ));
+    if (list.length >= 2) {
+      container.appendChild(el('div', { class: 'card chart-card' },
+        el('div', { class: 'card-label' }, 'Trend: vita & % grasso'),
+        el('canvas', { id: 'chart-meas', height: '200' }),
+      ));
+      requestAnimationFrame(() => drawMeasurementChart(list));
+    }
+  }
+
+  recompute();
+}
+
+function drawMeasurementChart(list) {
+  if (typeof Chart === 'undefined') return;
+  const ctx = $('#chart-meas')?.getContext('2d');
+  if (!ctx) return;
+  const labels = list.map(m => fmtDateShort(m.date));
+  new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Vita (cm)', data: list.map(m => m.circumferences?.waist ?? null), borderColor: '#f59e0b', backgroundColor: '#f59e0b22', yAxisID: 'yW', tension: 0.3, spanGaps: true, pointRadius: 4 },
+      { label: '% grasso (Navy)', data: list.map(m => m.bfNavy != null ? +m.bfNavy.toFixed(1) : null), borderColor: '#10b981', backgroundColor: '#10b98122', yAxisID: 'yB', tension: 0.3, spanGaps: true, pointRadius: 4 },
+    ] },
+    options: { plugins: { legend: { display: true } }, scales: { yW: { position: 'left' }, yB: { position: 'right', grid: { drawOnChartArea: false } } } },
+  });
+}
+
 function renderProfile() {
   const container = $('#view-profile');
   container.innerHTML = '';
@@ -3253,6 +3442,16 @@ function renderProfile() {
       el('button', { class: 'btn btn-primary', onclick: () => startAssessmentWizard() }, 'Fai il test'),
     ));
   }
+
+  // Misurazioni (pliche + circonferenze)
+  const measCount = getMeasurements().length;
+  container.appendChild(el('div', { class: 'card' },
+    el('div', { class: 'card-label' }, '📏 Misurazioni corporee'),
+    el('div', { class: 'help-text' }, measCount
+      ? `${measCount} misurazioni registrate. Pliche + circonferenze → % grasso e vita/altezza, con trend.`
+      : 'Pliche (plicometro) + circonferenze (metro): calcola % grasso e vita/altezza, e ne segue il trend. Il coach le usa per capire se perdi grasso o muscolo.'),
+    el('button', { class: 'btn btn-primary', onclick: () => renderMeasurements() }, '📏 Apri misurazioni'),
+  ));
 
   // Profilo
   const nameInput = field('Nome', profile.name, (v) => updateProfile({ name: v }));

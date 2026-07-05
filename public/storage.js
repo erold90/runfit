@@ -153,6 +153,27 @@ export function addWeight(kg, dateISO = new Date().toISOString()) {
   saveProfile(p);
 }
 
+// --- Misurazioni (pliche + circonferenze) ---------------------------------
+const LS_MEASUREMENTS = 'runfit.measurements';
+export function getMeasurements() {
+  try {
+    const list = JSON.parse(localStorage.getItem(LS_MEASUREMENTS) || '[]');
+    return list.sort((a, b) => new Date(a.date) - new Date(b.date));
+  } catch {
+    return [];
+  }
+}
+export function saveMeasurement(record) {
+  const list = getMeasurements();
+  list.push(record);
+  list.sort((a, b) => new Date(a.date) - new Date(b.date));
+  localStorage.setItem(LS_MEASUREMENTS, JSON.stringify(list));
+}
+export function deleteMeasurement(id) {
+  const list = getMeasurements().filter(m => m.id !== id);
+  localStorage.setItem(LS_MEASUREMENTS, JSON.stringify(list));
+}
+
 // --- Contesto per l'AI Coach ----------------------------------------------
 // Impacchetta profilo + assessment + progress + ultima sessione + storico
 // recente da inviare al Worker coach. Solo dati di allenamento, nessun dato
@@ -214,6 +235,21 @@ export function coachContext(focusSession = null) {
     points: weights.slice(-8).map(w => ({ date: w.date, kg: w.kg })),
   } : null;
 
+  // Misurazioni corporee (pliche + circonferenze): ultime 3, coi valori derivati
+  // già calcolati (grasso Navy/pliche, vita, WHtR). Servono al coach per capire
+  // se il calo peso è grasso o muscolo.
+  const meas = getMeasurements();
+  const measurements = meas.length ? meas.slice(-3).map(m => ({
+    date: m.date,
+    bfSkinfoldPct: m.bfSkinfold != null ? +m.bfSkinfold.toFixed(1) : null,
+    bfNavyPct: m.bfNavy != null ? +m.bfNavy.toFixed(1) : null,
+    waistCm: m.circumferences?.waist ?? null,
+    whtr: m.whtr != null ? +m.whtr.toFixed(3) : null,
+    armCm: m.circumferences?.arm ?? null,
+    thighCm: m.circumferences?.thigh ?? null,
+    weightKg: m.weightKg ?? null,
+  })) : null;
+
   return {
     now: now.toLocaleString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }),
     profile: {
@@ -233,6 +269,7 @@ export function coachContext(focusSession = null) {
     lastSession,
     history,
     weight: weightTrend,
+    measurements,
   };
 }
 
@@ -243,6 +280,7 @@ export function exportAllJson() {
     progress: getProgress(),
     sessions: getSessions(),
     weights: getWeights(),
+    measurements: getMeasurements(),
     settings: getSettings(),
     exportedAt: new Date().toISOString(),
     version: 1,
@@ -254,6 +292,7 @@ export function importAllJson(jsonStr) {
   if (data.progress) saveProgress(data.progress);
   if (data.sessions) localStorage.setItem(LS_SESSIONS, JSON.stringify(data.sessions));
   if (data.weights) localStorage.setItem(LS_WEIGHTS, JSON.stringify(data.weights));
+  if (data.measurements) localStorage.setItem(LS_MEASUREMENTS, JSON.stringify(data.measurements));
   if (data.settings) saveSettings(data.settings);
 }
 
