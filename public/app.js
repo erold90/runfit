@@ -3396,6 +3396,12 @@ function renderMeasurements() {
         el('canvas', { id: 'chart-meas', height: '200' }),
       ));
       requestAnimationFrame(() => drawMeasurementChart(list));
+    } else {
+      container.appendChild(el('div', { class: 'card' },
+        el('div', { class: 'card-label' }, 'Trend: vita & % grasso'),
+        el('div', { class: 'feedback-hint', style: 'margin: 4px' },
+          '📈 Il grafico dell\'andamento comparirà qui dalla tua seconda misurazione. Questa è la baseline: rimisurati tra ~1 settimana (circonferenze/peso) o ~2 settimane (pliche) per vedere la linea del trend.'),
+      ));
     }
   }
 
