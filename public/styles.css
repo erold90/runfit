@@ -650,6 +650,17 @@ body.session-strength .btn-control.btn-strength {
 }
 .meas-date { font-weight: 700; font-size: 0.85rem; }
 .meas-vals { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+.meas-row-info { flex: 1; min-width: 0; cursor: pointer; }
+.meas-row-info:active { opacity: 0.6; }
+.meas-row-chev { color: var(--text-muted); font-size: 1.4rem; line-height: 1; padding: 0 2px; cursor: pointer; }
+.meas-detail-list { display: flex; flex-direction: column; gap: 2px; }
+.meas-detail-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 4px; border-bottom: 1px solid var(--border);
+}
+.meas-detail-row:last-child { border-bottom: none; }
+.meas-detail-label { color: var(--text-muted); font-size: 0.9rem; }
+.meas-detail-val { font-weight: 700; font-size: 0.95rem; }
 
 /* Toggle Corsa | Forza nelle Stats */
 .stats-toggle {

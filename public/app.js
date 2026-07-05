@@ -3371,9 +3371,10 @@ function renderMeasurements() {
   if (list.length) {
     container.appendChild(el('div', { class: 'card' },
       el('div', { class: 'card-label' }, `Storico (${list.length})`),
+      el('div', { class: 'feedback-hint', style: 'margin: -4px 4px 8px' }, 'Tocca una riga per vedere il dettaglio completo.'),
       el('div', { class: 'meas-history' },
         ...[...list].reverse().map(m => el('div', { class: 'meas-row' },
-          el('div', {},
+          el('div', { class: 'meas-row-info', onclick: () => renderMeasurementDetail(m.id) },
             el('div', { class: 'meas-date' }, fmtDate(m.date)),
             el('div', { class: 'meas-vals' },
               [m.circumferences?.waist ? `vita ${m.circumferences.waist}` : null,
@@ -3382,6 +3383,7 @@ function renderMeasurements() {
                m.bfSkinfold != null ? `pliche ${m.bfSkinfold.toFixed(1)}%` : null,
                m.weightKg != null ? `${m.weightKg}kg` : null].filter(Boolean).join(' · ')),
           ),
+          el('div', { class: 'meas-row-chev', onclick: () => renderMeasurementDetail(m.id) }, '›'),
           el('button', { class: 'icon-btn', onclick: () => {
             if (confirm('Eliminare questa misurazione?')) { deleteMeasurement(m.id); renderMeasurements(); }
           } }, '🗑'),
@@ -3413,6 +3415,70 @@ function drawMeasurementChart(list) {
     ] },
     options: { plugins: { legend: { display: true } }, scales: { yW: { position: 'left' }, yB: { position: 'right', grid: { drawOnChartArea: false } } } },
   });
+}
+
+function renderMeasurementDetail(id) {
+  const container = $('#view-profile');
+  const list = getMeasurements();
+  const m = list.find(x => x.id === id);
+  if (!m) { renderMeasurements(); return; }
+  const profile = getProfile();
+  const sex = profile.isMale ? 'M' : 'F';
+  container.innerHTML = '';
+
+  container.appendChild(el('div', { class: 'editor-topbar' },
+    el('button', { class: 'btn btn-ghost btn-back', onclick: () => renderMeasurements() }, '‹ Storico'),
+    el('div', { class: 'editor-title' }, fmtDate(m.date)),
+  ));
+
+  // Valori derivati
+  const kpis = [
+    m.bfNavy != null ? [`${m.bfNavy.toFixed(1)}%`, '% grasso (Navy)'] : null,
+    m.bfSkinfold != null ? [`${m.bfSkinfold.toFixed(1)}%`, '% grasso (pliche)'] : null,
+    m.whtr != null ? [m.whtr.toFixed(2), 'Vita/altezza'] : null,
+    m.whr != null ? [m.whr.toFixed(2), 'Vita/fianchi'] : null,
+    m.sumSkinfold != null ? [`${m.sumSkinfold} mm`, 'Somma 3 pliche'] : null,
+    m.weightKg != null ? [`${m.weightKg} kg`, 'Peso'] : null,
+  ].filter(Boolean);
+  if (kpis.length) {
+    container.appendChild(el('div', { class: 'card' },
+      el('div', { class: 'card-label' }, 'Valori calcolati'),
+      el('div', { class: 'kpi-grid' },
+        ...kpis.map(k => el('div', { class: 'kpi' },
+          el('div', { class: 'kpi-value' }, k[0]),
+          el('div', { class: 'kpi-label' }, k[1]))),
+      ),
+    ));
+  }
+
+  // Riga dettaglio riutilizzabile
+  const detailRow = (label, val, unit) => el('div', { class: 'meas-detail-row' },
+    el('span', { class: 'meas-detail-label' }, label),
+    el('span', { class: 'meas-detail-val' }, val != null && val !== '' ? `${val} ${unit}` : '—'));
+
+  const circ = m.circumferences || {};
+  const circRows = CIRC_SITES.filter(s => circ[s.key] != null && circ[s.key] !== '')
+    .map(s => detailRow(s.label, circ[s.key], 'cm'));
+  if (circRows.length) {
+    container.appendChild(el('div', { class: 'card' },
+      el('div', { class: 'card-label' }, 'Circonferenze'),
+      el('div', { class: 'meas-detail-list' }, ...circRows),
+    ));
+  }
+
+  const sf = m.skinfolds || {};
+  const sfRows = SKINFOLD_SITES[sex].filter(s => sf[s.key] != null && sf[s.key] !== '')
+    .map(s => detailRow(s.label, sf[s.key], 'mm'));
+  if (sfRows.length) {
+    container.appendChild(el('div', { class: 'card' },
+      el('div', { class: 'card-label' }, 'Pliche'),
+      el('div', { class: 'meas-detail-list' }, ...sfRows),
+    ));
+  }
+
+  container.appendChild(el('button', { class: 'btn btn-ghost btn-block', style: 'color:#f87171', onclick: () => {
+    if (confirm('Eliminare questa misurazione?')) { deleteMeasurement(m.id); renderMeasurements(); }
+  } }, '🗑 Elimina misurazione'));
 }
 
 function renderProfile() {
